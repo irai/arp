@@ -232,10 +232,11 @@ func (c *ARPClient) arpScanLoop(refreshDuration time.Duration) error {
 			refreshThreshold := now.Add(probeInterval * -1)
 			offlineThreshold := now.Add(offlineMinutes * -1)
 
+			log.Info("ARP refresh online devices")
 			for i := range table {
 				// Don't probe if we received an update recently
 				if table[i].State == ARPStateNormal && table[i].LastUpdate.Before(refreshThreshold) {
-					log.Infof("ARP probe ip %s", table[i].IP)
+					log.Infof("ARP refresh ip %s", table[i].IP)
 					err := c.request(c.config.HostMAC, c.config.HostIP, table[i].IP) // Request
 					if err != nil {
 						log.Error("Error ARP request: ", table[i].IP, err)
@@ -263,7 +264,7 @@ func (c *ARPClient) arpProbe() error {
 		ip[3] = byte(host)
 
 		// err := ARPRequest(c.config.HostMAC, net.IPv4zero, ip) // Send ARP Probe
-		log.Debugf("ARP probe ip %s", ip.String())
+		// log.Debugf("ARP probe ip %s", ip.String())
 		err := c.request(c.config.HostMAC, c.config.HostIP, ip) // Request
 		if err != nil {
 			log.Error("Error ARP request: ", ip.String(), err)
@@ -395,7 +396,7 @@ func (c *ARPClient) ARPListenAndServe(scanInterval time.Duration) {
 			if target != nil && target.State == ARPStateVirtualHost {
 				log.WithFields(log.Fields{"ip": target.IP, "mac": target.MAC}).Info("ARP sending reply for virtual mac")
 				c.ARPReply(target.MAC, target.IP, EthernetBroadcast, target.IP)
-				return
+				break
 			}
 
 			switch sender.State {
