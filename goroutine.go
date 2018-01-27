@@ -11,11 +11,13 @@ type GoroutinePool struct {
 	StopChannel    chan struct{}
 	stoppedChannel chan int
 	n              int
+	Stopping       bool
 	name           string
 }
 
 func (h *GoroutinePool) Init(name string) {
 	h.name = name
+	h.Stopping = false
 	h.StopChannel = make(chan struct{})
 	h.stoppedChannel = make(chan int)
 }
@@ -31,6 +33,7 @@ func (h *GoroutinePool) End() {
 
 func (h *GoroutinePool) Stop() error {
 	// closing stopChannel will cause all waiting goroutines to exit
+	h.Stopping = true
 	close(h.StopChannel)
 
 	for {
@@ -40,7 +43,7 @@ func (h *GoroutinePool) Stop() error {
 			h.n--
 			log.Infof("%s goroutine stopped - remaining %d", h.name, h.n)
 			if h.n <= 0 {
-				break
+				return nil
 			}
 		case <-time.After(5 * time.Second):
 			log.Error("ARP stop timed out")

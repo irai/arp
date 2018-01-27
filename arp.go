@@ -235,7 +235,7 @@ func (c *ARPClient) arpScanLoop(refreshDuration time.Duration) error {
 			for i := range table {
 				// Don't probe if we received an update recently
 				if table[i].State == ARPStateNormal && table[i].LastUpdate.Before(refreshThreshold) {
-					log.Debugf("ARP probe ip %s", table[i].IP)
+					log.Infof("ARP probe ip %s", table[i].IP)
 					err := c.request(c.config.HostMAC, c.config.HostIP, table[i].IP) // Request
 					if err != nil {
 						log.Error("Error ARP request: ", table[i].IP, err)
@@ -248,7 +248,6 @@ func (c *ARPClient) arpScanLoop(refreshDuration time.Duration) error {
 					}
 				}
 			}
-
 		}
 	}
 	return nil
@@ -259,7 +258,7 @@ func (c *ARPClient) arpProbe() error {
 	// Copy underneath array so we can modify value.
 	ip := net.ParseIP(c.config.HomeLAN.IP.String()).To4()
 
-	log.Info("Discovering IP - sending 254 ARP requests")
+	log.Info("ARP Discovering IP - sending 254 ARP requests")
 	for host := 1; host < 255; host++ {
 		ip[3] = byte(host)
 
@@ -363,7 +362,11 @@ func (c *ARPClient) ARPListenAndServe(scanInterval time.Duration) {
 				time.Sleep(time.Millisecond * 30) // Wait a few seconds before retrying
 				continue
 			}
-			log.Fatal("ARP error listenandserve goroutine terminating: ", err)
+			if c.workers.Stopping {
+				log.Info("ARP listenandserver goroutine stopping normally")
+			} else {
+				log.Fatal("ARP error listenandserve goroutine terminating: ", err)
+			}
 			return
 		}
 
