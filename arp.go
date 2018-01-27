@@ -47,8 +47,9 @@ type ARPClient struct {
 	mutex        sync.Mutex
 	table        []ARPEntry
 	notification chan<- ARPEntry // Notification channel for new entries
-	tranChannel  chan<- ARPEntry // Transition channel for arp hunt ent
+	tranChannel  chan<- ARPEntry // timeTransition channel for arp hunt ent
 	config       ARPConfig
+	workers      GoroutinePool
 }
 
 var (
@@ -91,6 +92,8 @@ func NewARPClient(nic string, hostMAC net.HardwareAddr, hostIP net.IP, routerIP 
 	c.config.RouterIP = routerIP
 	c.config.HomeLAN = homeLAN
 
+	c.workers.Init("ARPworker")
+
 	log.WithFields(log.Fields{"hostinterface": c.config.NIC, "hostmac": c.config.HostMAC.String(),
 		"hostip": c.config.HostIP.String(), "lanrouter": c.config.RouterIP.String()}).Info("ARP configuration")
 
@@ -112,6 +115,15 @@ func (c *ARPClient) AddNotificationChannel(notification chan<- ARPEntry) {
 //
 func (c *ARPClient) AddTransitionChannel(channel chan<- ARPEntry) {
 	c.tranChannel = channel
+}
+
+func (c *ARPClient) Stop() error {
+
+	// Close the arp socket
+	c.client.Close()
+
+	// closing stopChannel will cause all waiting goroutines to exit
+	return c.workers.Stop()
 }
 
 // request send ARP request from src to dst
@@ -179,47 +191,65 @@ func (c *ARPClient) ARPReply(srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr
 func (c *ARPClient) ARPPrintTable() {
 	log.Infof("ARP Table: %v entries", len(c.table))
 	for _, v := range c.table {
-		log.WithFields(log.Fields{"clientmac": v.MAC.String(), "clientip": v.IP.String()}).Infof("ARP table %5v %10s %18s  %14s previous %14s", v.Online, v.State, v.MAC, v.IP, v.PreviousIP)
+		log.WithFields(log.Fields{"clientmac": v.MAC.String(), "clientip": v.IP.String()}).
+			Infof("ARP table %5v %10s %18s  %14s previous %14s", v.Online, v.State, v.MAC, v.IP, v.PreviousIP)
 	}
 }
 
-// ARPProbeLoop send a ARP request to all 255 IP addresses first time.
-//              then just update existing mac addresses
+// arpScanLoop detect new MACs and also when existing MACs are no longer online.
+// Send ARP request to all 255 IP addresses first time then send ARP request every so many minutes.
+// Probe known macs more often in case they left the network.
+//
+// refreshDuration is the the duration between full scans
 //
 // Note: ARP loop should not run when there is a hunt in progress
-func (c *ARPClient) ARPProbeLoop(refreshDuration time.Duration) error {
+func (c *ARPClient) arpScanLoop(refreshDuration time.Duration) error {
+	// Goroutine pool
+	h := c.workers.Begin()
+	defer h.End()
 
 	c.arpProbe()
 
-	go func() {
-		for {
-			time.Sleep(refreshDuration)
+	// Ticker used to perform full scan
+	ticker := time.NewTicker(refreshDuration).C
+	for {
+		// timer for probing known macs
+		probe := time.NewTimer(probeInterval).C
+		select {
+		case <-ticker:
 			c.arpProbe()
-		}
-	}()
 
-	ticker := time.NewTicker(probeInterval)
-	for range ticker.C {
-		c.mutex.Lock()
-		table := c.table[:]
-		c.mutex.Unlock()
-		now := time.Now()
+		case <-c.workers.StopChannel:
+			log.Info("ARP stopping probeLoop")
+			return nil
 
-		for i := range table {
-			if table[i].State == ARPStateNormal {
-				log.Debugf("ARP probe ip %s", table[i].IP)
-				err := c.request(c.config.HostMAC, c.config.HostIP, table[i].IP) // Request
-				if err != nil {
-					log.Error("Error ARP request: ", table[i].IP, err)
-				}
-				time.Sleep(time.Millisecond * 25)
+		case <-probe:
+			c.mutex.Lock()
+			table := c.table[:]
+			c.mutex.Unlock()
 
-				if now.Sub(table[i].LastUpdate) > offlineMinutes {
-					table[i].Online = false
+			now := time.Now()
+			refreshThreshold := now.Add(probeInterval * -1)
+			offlineThreshold := now.Add(offlineMinutes * -1)
+
+			for i := range table {
+				// Don't probe if we received an update recently
+				if table[i].State == ARPStateNormal && table[i].LastUpdate.Before(refreshThreshold) {
+					log.Debugf("ARP probe ip %s", table[i].IP)
+					err := c.request(c.config.HostMAC, c.config.HostIP, table[i].IP) // Request
+					if err != nil {
+						log.Error("Error ARP request: ", table[i].IP, err)
+					}
+					// Give it a chance to update
+					time.Sleep(time.Millisecond * 15)
+
+					if table[i].LastUpdate.Before(offlineThreshold) {
+						table[i].Online = false
+					}
 				}
 			}
-		}
 
+		}
 	}
 	return nil
 }
@@ -309,7 +339,13 @@ func (c *ARPClient) ARPGetTable() (table []ARPEntry) {
 // Reply     from_MAC  to_IP     action1               action 2
 //           normal    host      actionUpdateTable
 //           capture   host      actionClaimIP (the client still claim the IP)
-func (c *ARPClient) ARPListenAndServe() {
+func (c *ARPClient) ARPListenAndServe(scanInterval time.Duration) {
+	// Goroutine pool
+	h := c.workers.Begin()
+	defer h.End()
+
+	// Goroutine to continualsy scan for network devices
+	go func() { time.Sleep(time.Millisecond * 10); c.arpScanLoop(scanInterval) }()
 
 	// Set ZERO timeout to block forever
 	if err := c.client.SetReadDeadline(time.Time{}); err != nil {
@@ -319,7 +355,12 @@ func (c *ARPClient) ARPListenAndServe() {
 
 	// Loop and wait for replies
 	for {
-		// log.Debugf("ARP loop start ")
+
+		// Set ZERO timeout to block forever
+		if err := c.client.SetReadDeadline(time.Time{}); err != nil {
+			log.Error("ARP error in socket:", err)
+			return
+		}
 
 		packet, _, err := c.client.Read()
 		if err != nil {
