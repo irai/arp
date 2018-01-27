@@ -356,17 +356,15 @@ func (c *ARPClient) ARPListenAndServe(scanInterval time.Duration) {
 	// Loop and wait for replies
 	for {
 
-		// Set ZERO timeout to block forever
-		if err := c.client.SetReadDeadline(time.Time{}); err != nil {
-			log.Error("ARP error in socket:", err)
-			return
-		}
-
 		packet, _, err := c.client.Read()
 		if err != nil {
-			log.Info("ARP error in read socket: ", err)
-			time.Sleep(time.Millisecond * 30) // Wait a few seconds before retrying
-			continue
+			if err1, ok := err.(net.Error); ok && err1.Temporary() {
+				log.Info("ARP error in read socket is temporary - retry", err1)
+				time.Sleep(time.Millisecond * 30) // Wait a few seconds before retrying
+				continue
+			}
+			log.Fatal("ARP error listenandserve goroutine terminating: ", err)
+			return
 		}
 
 		sender := c.ARPFindMAC(packet.SenderHardwareAddr.String())
