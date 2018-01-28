@@ -234,8 +234,10 @@ func (c *ARPClient) arpScanLoop(refreshDuration time.Duration) error {
 
 			log.Info("ARP refresh online devices")
 			for i := range table {
-				// Don't probe if we received an update recently
-				if table[i].State == ARPStateNormal && table[i].LastUpdate.Before(refreshThreshold) {
+				// Don't probe if we received an update recently or if the device is offline.
+				if table[i].State == ARPStateNormal &&
+					table[i].Online == true &&
+					table[i].LastUpdate.Before(refreshThreshold) {
 					log.Infof("ARP refresh ip %s", table[i].IP)
 					err := c.request(c.config.HostMAC, c.config.HostIP, table[i].IP) // Request
 					if err != nil {
@@ -439,16 +441,4 @@ func (c *ARPClient) ARPListenAndServe(scanInterval time.Duration) {
 
 		}
 	}
-}
-
-func dupIP(srcIP net.IP) net.IP {
-	ip := make(net.IP, len(srcIP))
-	copy(ip, srcIP)
-	return ip
-}
-
-func dupMAC(srcMAC net.HardwareAddr) net.HardwareAddr {
-	mac := make(net.HardwareAddr, len(srcMAC))
-	copy(mac, srcMAC)
-	return mac
 }

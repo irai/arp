@@ -6,6 +6,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"math/rand"
 	"net"
+	"spinifex/network"
 	"time"
 )
 
@@ -310,8 +311,8 @@ func (c *ARPClient) actionClaimIP(client *ARPEntry, senderMAC net.HardwareAddr, 
 }
 
 func (c *ARPClient) arpTableAppend(state arpState, clientMAC net.HardwareAddr, clientIP net.IP) (ret *ARPEntry) {
-	mac := dupMAC(clientMAC)    // copy the underlying slice
-	ip := dupIP(clientIP).To4() // copy the underlysing slice
+	mac := network.DupMAC(clientMAC)    // copy the underlying slice
+	ip := network.DupIP(clientIP).To4() // copy the underlysing slice
 
 	log.WithFields(log.Fields{"ip": ip.String(), "mac": mac.String()}).Warn("ARP new mac detected")
 
