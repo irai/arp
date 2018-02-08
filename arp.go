@@ -270,7 +270,18 @@ func (c *ARPClient) arpProbe() error {
 		// log.Debugf("ARP probe ip %s", ip.String())
 		err := c.request(c.config.HostMAC, c.config.HostIP, ip) // Request
 		if err != nil {
-			log.Error("Error ARP request: ", ip.String(), err)
+			if err1, ok := err.(net.Error); ok && err1.Temporary() {
+				log.Info("ARP error in read socket is temporary - retry", err1)
+				time.Sleep(time.Millisecond * 100) // Wait before retrying
+				continue
+			}
+			if c.workers.Stopping {
+				log.Info("ARP arpProbe goroutine stopping normally")
+				return nil
+			}
+
+			log.Error("ARP arpProbe goroutine terminating: ", err)
+			return err
 		}
 		time.Sleep(time.Millisecond * 25)
 	}
