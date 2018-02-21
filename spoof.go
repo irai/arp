@@ -74,8 +74,7 @@ func (c *ARPClient) ARPIPChanged(clientHwAddr net.HardwareAddr, clientIP net.IP)
 //  4. set a callback when we receive a request from this client
 //
 // client will revert back to "normal" when a new IP is detected for the MAC
-func (c *ARPClient) ARPForceIPChange(clientHwAddr net.HardwareAddr, clientIP net.IP,
-	callback func(srcHwAddr net.HardwareAddr, srcIP net.IP)) error {
+func (c *ARPClient) ARPForceIPChange(clientHwAddr net.HardwareAddr, clientIP net.IP) error {
 	log.WithFields(log.Fields{"clientmac": clientHwAddr.String(), "clientip": clientIP.String()}).Warn("ARP capture force IP change")
 
 	client := c.ARPFindMAC(clientHwAddr.String())
@@ -100,11 +99,9 @@ func (c *ARPClient) ARPForceIPChange(clientHwAddr net.HardwareAddr, clientIP net
 	// Create a virtual host to handle this IP
 	virtual := c.arpTableAppend(ARPStateVirtualHost, ARPNewVirtualMAC(), clientIP)
 	// virtual.callback = arpReplyVirtualMAC
-	virtual.callback = nil
 
 	// Set client state to capture and reset IP address
 	c.mutex.Lock()
-	client.callback = callback
 	client.PreviousIP = net.ParseIP(client.IP.String()).To4()
 	client.IP = net.IPv4zero
 	client.State = ARPStateHunt
@@ -203,14 +200,16 @@ func (c *ARPClient) actionUpdateClient(client *ARPEntry, senderMAC net.HardwareA
 		virtual := client.PreviousIP
 		client.PreviousIP = client.IP
 		client.IP = net.ParseIP(senderIP.String()).To4()
-		callback := client.callback
 		client.State = ARPStateNormal
 		c.mutex.Unlock()
 		c.deleteVirtualMAC(virtual)
 
-		if callback != nil {
-			client.callback(client.MAC, client.IP)
+		if c.notification != nil {
+			c.notification <- *client
 		}
+		// if callback != nil {
+		// client.callback(client.MAC, client.IP)
+		// }
 	}
 }
 

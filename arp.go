@@ -13,7 +13,7 @@ type ARPEntry struct {
 	MAC        net.HardwareAddr
 	IP         net.IP
 	PreviousIP net.IP
-	callback   func(srcHwAddr net.HardwareAddr, srcIP net.IP)
+	// callback   func(srcHwAddr net.HardwareAddr, srcIP net.IP)
 	State      arpState
 	LastUpdate time.Time
 	Online     bool
