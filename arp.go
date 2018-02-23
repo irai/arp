@@ -357,6 +357,13 @@ func (c *ARPClient) ARPListenAndServe(scanInterval time.Duration) {
 	// Goroutine pool
 	h := c.workers.Begin()
 	defer h.End()
+	defer func() {
+		if c.workers.Stopping {
+			log.Info("ARP listenandserver goroutine stopping")
+		} else {
+			log.Fatal("ARP error listenandserve goroutine terminating")
+		}
+	}()
 
 	// Goroutine to continualsy scan for network devices
 	go func() { time.Sleep(time.Millisecond * 10); c.arpScanLoop(scanInterval) }()
@@ -372,15 +379,11 @@ func (c *ARPClient) ARPListenAndServe(scanInterval time.Duration) {
 
 		packet, _, err := c.client.Read()
 		if err != nil {
+			log.Error("ARP read error ", err)
 			if err1, ok := err.(net.Error); ok && err1.Temporary() {
-				log.Info("ARP error in read socket is temporary - retry", err1)
+				log.Info("ARP read error is temporary - retry", err1)
 				time.Sleep(time.Millisecond * 30) // Wait a few seconds before retrying
 				continue
-			}
-			if c.workers.Stopping {
-				log.Info("ARP listenandserver goroutine stopping normally")
-			} else {
-				log.Fatal("ARP error listenandserve goroutine terminating: ", err)
 			}
 			return
 		}
