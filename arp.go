@@ -93,7 +93,7 @@ func NewARPClient(nic string, hostMAC net.HardwareAddr, hostIP net.IP, routerIP 
 	c.config.RouterIP = routerIP
 	c.config.HomeLAN = homeLAN
 
-	c.workers.Init("ARPworker")
+	c.workers.Init("ARP")
 
 	log.WithFields(log.Fields{"hostinterface": c.config.NIC, "hostmac": c.config.HostMAC.String(),
 		"hostip": c.config.HostIP.String(), "lanrouter": c.config.RouterIP.String()}).Info("ARP configuration")
@@ -206,7 +206,7 @@ func (c *ARPClient) ARPPrintTable() {
 // Note: ARP loop should not run when there is a hunt in progress
 func (c *ARPClient) arpScanLoop(refreshDuration time.Duration) error {
 	// Goroutine pool
-	h := c.workers.Begin()
+	h := c.workers.Begin("scanloop", false)
 	defer h.End()
 
 	c.arpProbe()
@@ -355,7 +355,7 @@ func (c *ARPClient) ARPGetTable() (table []ARPEntry) {
 //           capture   host      actionClaimIP (the client still claim the IP)
 func (c *ARPClient) ARPListenAndServe(scanInterval time.Duration) {
 	// Goroutine pool
-	h := c.workers.Begin()
+	h := c.workers.Begin("listenandserver", true)
 	defer h.End()
 	defer func() {
 		if c.workers.Stopping {
