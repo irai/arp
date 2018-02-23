@@ -206,7 +206,7 @@ func (c *ARPClient) ARPPrintTable() {
 // Note: ARP loop should not run when there is a hunt in progress
 func (c *ARPClient) arpScanLoop(refreshDuration time.Duration) error {
 	// Goroutine pool
-	h := c.workers.Begin()
+	h := c.workers.Begin("ARP scanloop", false)
 	defer h.End()
 
 	c.arpProbe()
@@ -355,7 +355,7 @@ func (c *ARPClient) ARPGetTable() (table []ARPEntry) {
 //           capture   host      actionClaimIP (the client still claim the IP)
 func (c *ARPClient) ARPListenAndServe(scanInterval time.Duration) {
 	// Goroutine pool
-	h := c.workers.Begin()
+	h := c.workers.Begin("ARP listenandserver", true)
 	defer h.End()
 
 	// Goroutine to continualsy scan for network devices
@@ -372,15 +372,11 @@ func (c *ARPClient) ARPListenAndServe(scanInterval time.Duration) {
 
 		packet, _, err := c.client.Read()
 		if err != nil {
+			log.Error("ARP read error: ", err)
 			if err1, ok := err.(net.Error); ok && err1.Temporary() {
 				log.Info("ARP error in read socket is temporary - retry", err1)
 				time.Sleep(time.Millisecond * 30) // Wait a few seconds before retrying
 				continue
-			}
-			if c.workers.Stopping {
-				log.Info("ARP listenandserver goroutine stopping normally")
-			} else {
-				log.Fatal("ARP error listenandserve goroutine terminating: ", err)
 			}
 			return
 		}
