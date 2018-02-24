@@ -154,9 +154,12 @@ func (c *ARPClient) request(srcHwAddr net.HardwareAddr, srcIP net.IP, dstIP net.
 
 	return c.client.WriteTo(arp, EthernetBroadcast)
 }
+func (c *ARPClient) Request(srcHwAddr net.HardwareAddr, srcIP net.IP, dstIP net.IP) error {
+	return c.request(srcHwAddr, srcIP, dstIP)
+}
 
 // ARPRequest send an ARP Request packet using a new socket client underneath. it does not
-func ARPRequest(nic string, srcHwAddr net.HardwareAddr, srcIP net.IP, dstIP net.IP) error {
+func DONTARPRequest(nic string, srcHwAddr net.HardwareAddr, srcIP net.IP, dstIP net.IP) error {
 	log.WithFields(log.Fields{"clientmac": srcHwAddr.String(), "clientip": srcIP.String()}).Debugf("ARP send request who is %s tell %s", dstIP.String(), srcIP.String())
 	c, err := NewARPClient(nic, net.HardwareAddr{}, net.IP{}, net.IP{}, net.IPNet{})
 	if err != nil {
@@ -258,6 +261,8 @@ func (c *ARPClient) arpScanLoop(refreshDuration time.Duration) error {
 }
 
 func (c *ARPClient) arpProbe() error {
+	h := c.workers.Begin("arpProbe", true)
+	defer h.End()
 
 	// Copy underneath array so we can modify value.
 	ip := net.ParseIP(c.config.HomeLAN.IP.String()).To4()
@@ -270,17 +275,13 @@ func (c *ARPClient) arpProbe() error {
 		// log.Debugf("ARP probe ip %s", ip.String())
 		err := c.request(c.config.HostMAC, c.config.HostIP, ip) // Request
 		if err != nil {
+			log.Error("ARP request error ", err)
 			if err1, ok := err.(net.Error); ok && err1.Temporary() {
 				log.Info("ARP error in read socket is temporary - retry", err1)
 				time.Sleep(time.Millisecond * 100) // Wait before retrying
 				continue
 			}
-			if c.workers.Stopping {
-				log.Info("ARP arpProbe goroutine stopping normally")
-				return nil
-			}
 
-			log.Error("ARP arpProbe goroutine terminating: ", err)
 			return err
 		}
 		time.Sleep(time.Millisecond * 25)
@@ -355,18 +356,16 @@ func (c *ARPClient) ARPGetTable() (table []ARPEntry) {
 //           capture   host      actionClaimIP (the client still claim the IP)
 func (c *ARPClient) ARPListenAndServe(scanInterval time.Duration) {
 	// Goroutine pool
-	h := c.workers.Begin("listenandserver", true)
+	h := c.workers.Begin("listenandserve", true)
 	defer h.End()
-	defer func() {
-		if c.workers.Stopping {
-			log.Info("ARP listenandserver goroutine stopping")
-		} else {
-			log.Fatal("ARP error listenandserve goroutine terminating")
-		}
-	}()
 
 	// Goroutine to continualsy scan for network devices
-	go func() { time.Sleep(time.Millisecond * 10); c.arpScanLoop(scanInterval) }()
+	go func() {
+		if scanInterval != time.Duration(0) {
+			time.Sleep(time.Millisecond * 10)
+			c.arpScanLoop(scanInterval)
+		}
+	}()
 
 	// Set ZERO timeout to block forever
 	if err := c.client.SetReadDeadline(time.Time{}); err != nil {
