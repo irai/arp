@@ -261,8 +261,6 @@ func (c *ARPClient) arpScanLoop(refreshDuration time.Duration) error {
 }
 
 func (c *ARPClient) arpProbe() error {
-	h := c.workers.Begin("arpProbe", true)
-	defer h.End()
 
 	// Copy underneath array so we can modify value.
 	ip := net.ParseIP(c.config.HomeLAN.IP.String()).To4()
