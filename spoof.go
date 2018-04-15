@@ -339,6 +339,8 @@ func (c *ARPClient) arpTableAppend(state arpState, clientMAC net.HardwareAddr, c
 
 	c.mutex.Unlock()
 
+	ret.Online = true
+
 	// Notify if channel given and not virtual host
 	if ret.State != ARPStateVirtualHost && c.notification != nil {
 		c.notification <- *ret
