@@ -192,14 +192,6 @@ func (c *ARPClient) ARPReply(srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr
 	return c.client.WriteTo(p, dstHwAddr)
 }
 
-func (c *ARPClient) ARPPrintTable() {
-	log.Infof("ARP Table: %v entries", len(c.table))
-	for _, v := range c.table {
-		log.WithFields(log.Fields{"clientmac": v.MAC.String(), "clientip": v.IP.String()}).
-			Infof("ARP table %5v %10s %18s  %14s previous %14s", v.Online, v.State, v.MAC, v.IP, v.PreviousIP)
-	}
-}
-
 // arpScanLoop detect new MACs and also when existing MACs are no longer online.
 // Send ARP request to all 255 IP addresses first time then send ARP request every so many minutes.
 // Probe known macs more often in case they left the network.
@@ -299,41 +291,31 @@ func (c *ARPClient) ARPProbeIP(ip net.IP) {
 	c.request(c.config.HostMAC, c.config.HostIP, ip) // Request
 }
 
-func (c *ARPClient) ARPFindMAC(mac string) *ARPEntry {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
+func (c *ARPClient) actionUpdateClient(client *ARPEntry, senderMAC net.HardwareAddr, senderIP net.IP) int {
+	// client.LastUpdate = time.Now()
 
-	for i := range c.table {
-		if c.table[i].MAC.String() == mac {
-			return &c.table[i]
-		}
+	// Update IP if client changed
+	// Ignore router updates: our router broadcast 169.254.x.x local link IP.
+	//
+	if !client.IP.Equal(senderIP) && !senderIP.Equal(net.IPv4zero) &&
+		senderMAC.String() != c.config.RouterMAC.String() &&
+		!senderIP.Equal(c.config.HostIP) &&
+		!CIDR_169_254.Contains(senderIP) {
+		log.WithFields(log.Fields{"clientmac": client.MAC.String(), "clientip": client.IP.String()}).Infof("ARP client changed IP to %s", senderIP.String())
+		c.mutex.Lock()
+		virtual := client.PreviousIP
+		client.PreviousIP = client.IP
+		client.IP = net.ParseIP(senderIP.String()).To4()
+		client.State = ARPStateNormal
+		c.mutex.Unlock()
+		c.deleteVirtualMAC(virtual)
+
+		return 1
+		// if c.notification != nil {
+		// c.notification <- *client
+		// }
 	}
-	return nil
-}
-
-func (c *ARPClient) ARPFindIP(ip net.IP) *ARPEntry {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-
-	if ip.Equal(net.IPv4zero) {
-		return nil
-	}
-
-	for i := range c.table {
-		if c.table[i].IP.Equal(ip) {
-			return &c.table[i]
-		}
-	}
-	return nil
-}
-
-func (c *ARPClient) ARPGetTable() (table []ARPEntry) {
-	for i := range c.table {
-		if c.table[i].State != ARPStateVirtualHost && c.table[i].State != ARPStateDeleted {
-			table = append(table, c.table[i])
-		}
-	}
-	return table
+	return 0
 }
 
 // ARPListenAndServe wait for ARP packets and action these.
@@ -390,14 +372,20 @@ func (c *ARPClient) ARPListenAndServe(scanInterval time.Duration) {
 			return
 		}
 
+		notify := 0
+
 		sender := c.ARPFindMAC(packet.SenderHardwareAddr.String())
 		if sender == nil {
 			// If new client, the create a new entry in table
 			// NOTE: if this is a probe, the sender IP will be Zeros
 			sender = c.arpTableAppend(ARPStateNormal, packet.SenderHardwareAddr, packet.SenderIP)
+			notify += 1
 		}
 
-		sender.Online = true
+		if sender.Online == false {
+			sender.Online = true
+			notify += 1
+		}
 		sender.LastUpdate = time.Now()
 
 		// log.Debugf("ARP loop received packet type %v - mac %s", packet.Operation, sender.MAC.String())
@@ -423,7 +411,7 @@ func (c *ARPClient) ARPListenAndServe(scanInterval time.Duration) {
 				c.actionRequestInHuntState(sender, packet.SenderIP, packet.TargetIP)
 
 			case ARPStateNormal:
-				c.actionUpdateClient(sender, packet.SenderHardwareAddr, packet.SenderIP)
+				notify += c.actionUpdateClient(sender, packet.SenderHardwareAddr, packet.SenderIP)
 
 			// case ARPStateVirtualHost:
 			// arpReplyVirtualMAC(packet.SenderHardwareAddr, packet.SenderIP, packet.TargetHardwareAddr, packet.TargetIP)
@@ -438,13 +426,13 @@ func (c *ARPClient) ARPListenAndServe(scanInterval time.Duration) {
 
 			switch sender.State {
 			case ARPStateNormal:
-				c.actionUpdateClient(sender, packet.SenderHardwareAddr, packet.SenderIP)
+				notify += c.actionUpdateClient(sender, packet.SenderHardwareAddr, packet.SenderIP)
 
 			case ARPStateHunt:
 				// Android does not send collision detection request,
 				// we will see a reply instead. Check if the address has changed.
 				if !packet.SenderIP.Equal(net.IPv4zero) && !packet.SenderIP.Equal(sender.PreviousIP) {
-					c.actionUpdateClient(sender, packet.SenderHardwareAddr, packet.SenderIP)
+					notify += c.actionUpdateClient(sender, packet.SenderHardwareAddr, packet.SenderIP)
 				} else {
 					c.actionClaimIP(sender, packet.SenderHardwareAddr, packet.SenderIP)
 				}
@@ -456,6 +444,10 @@ func (c *ARPClient) ARPListenAndServe(scanInterval time.Duration) {
 				log.WithFields(log.Fields{"clientip": sender.IP, "clientmac": sender.MAC}).Error("ARP unexpected client state in reply =", sender.State)
 			}
 
+		}
+
+		if notify >= 0 && c.notification != nil {
+			c.notification <- *sender
 		}
 	}
 }

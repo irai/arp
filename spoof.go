@@ -6,7 +6,6 @@ import (
 	log "github.com/sirupsen/logrus"
 	"math/rand"
 	"net"
-	"spinifex/network"
 	"time"
 )
 
@@ -63,7 +62,10 @@ func (c *ARPClient) ARPIPChanged(clientHwAddr net.HardwareAddr, clientIP net.IP)
 	if client.State == ARPStateHunt {
 		c.actionRequestInHuntState(client, clientIP, clientIP)
 	} else {
-		c.actionUpdateClient(client, client.MAC, clientIP)
+		notify := c.actionUpdateClient(client, client.MAC, clientIP)
+		if notify >= 0 && c.notification != nil {
+			c.notification <- *client
+		}
 	}
 }
 
@@ -185,35 +187,7 @@ func (c *ARPClient) actionStopHunt(client *ARPEntry) {
 	c.mutex.Unlock()
 }
 
-func (c *ARPClient) actionUpdateClient(client *ARPEntry, senderMAC net.HardwareAddr, senderIP net.IP) {
-	// client.LastUpdate = time.Now()
-
-	// Update IP if client changed
-	// Ignore router updates: our router broadcast 169.254.x.x local link IP.
-	//
-	if !client.IP.Equal(senderIP) && !senderIP.Equal(net.IPv4zero) &&
-		senderMAC.String() != c.config.RouterMAC.String() &&
-		!senderIP.Equal(c.config.HostIP) &&
-		!CIDR_169_254.Contains(senderIP) {
-		log.WithFields(log.Fields{"clientmac": client.MAC.String(), "clientip": client.IP.String()}).Infof("ARP client changed IP to %s", senderIP.String())
-		c.mutex.Lock()
-		virtual := client.PreviousIP
-		client.PreviousIP = client.IP
-		client.IP = net.ParseIP(senderIP.String()).To4()
-		client.State = ARPStateNormal
-		c.mutex.Unlock()
-		c.deleteVirtualMAC(virtual)
-
-		if c.notification != nil {
-			c.notification <- *client
-		}
-		// if callback != nil {
-		// client.callback(client.MAC, client.IP)
-		// }
-	}
-}
-
-func (c *ARPClient) actionRequestInHuntState(client *ARPEntry, senderIP net.IP, targetIP net.IP) (err error) {
+func (c *ARPClient) actionRequestInHuntState(client *ARPEntry, senderIP net.IP, targetIP net.IP) (n int, err error) {
 
 	// We are only interested in ARP Address Conflict Detection packets:
 	//
@@ -249,16 +223,16 @@ func (c *ARPClient) actionRequestInHuntState(client *ARPEntry, senderIP net.IP, 
 		client.State = ARPStateNormal
 		c.mutex.Unlock()
 
-		c.actionUpdateClient(client, client.MAC, targetIP)
+		n := c.actionUpdateClient(client, client.MAC, targetIP)
 
-		return
+		return n, nil
 	}
 
 	log.Warnf("ARP client attempting to get same IP previous %s new %s", client.PreviousIP, targetIP)
 
 	err = c.actionClaimIP(client, client.MAC, targetIP)
 
-	return err
+	return 0, err
 }
 
 func (c *ARPClient) actionClaimIP(client *ARPEntry, senderMAC net.HardwareAddr, senderIP net.IP) (err error) {
@@ -309,47 +283,6 @@ func (c *ARPClient) actionClaimIP(client *ARPEntry, senderMAC net.HardwareAddr, 
 	return nil
 }
 
-func (c *ARPClient) arpTableAppend(state arpState, clientMAC net.HardwareAddr, clientIP net.IP) (ret *ARPEntry) {
-	mac := network.DupMAC(clientMAC)    // copy the underlying slice
-	ip := network.DupIP(clientIP).To4() // copy the underlysing slice
-
-	log.WithFields(log.Fields{"ip": ip.String(), "mac": mac.String()}).Warn("ARP new mac detected")
-
-	c.mutex.Lock()
-
-	// Attempt to reuse deleted entry if available
-	for i := range c.table {
-		if c.table[i].State == ARPStateDeleted {
-			c.table[i].State = state
-			c.table[i].MAC = mac
-			c.table[i].IP = ip
-			c.table[i].LastUpdate = time.Now()
-			c.table[i].Online = true
-			ret = &c.table[i]
-			break
-		}
-	}
-
-	// Extend table when deleted entries are not available
-	if ret == nil {
-		entry := ARPEntry{State: state, MAC: mac, IP: ip.To4(), LastUpdate: time.Now(), Online: true}
-		c.table = append(c.table, entry)
-		ret = &c.table[len(c.table)-1]
-	}
-
-	c.mutex.Unlock()
-
-	ret.Online = true
-
-	// Notify if channel given and not virtual host
-	if ret.State != ARPStateVirtualHost && c.notification != nil {
-		c.notification <- *ret
-	}
-
-	c.ARPPrintTable()
-	return ret
-}
-
 func ARPNewVirtualMAC() net.HardwareAddr {
 	buf := make([]byte, 6)
 	_, err := rand.Read(buf)
@@ -361,16 +294,4 @@ func ARPNewVirtualMAC() net.HardwareAddr {
 	buf[0] = (buf[0] | 2) & 0xfe // Set local bit, ensure unicast address
 	mac, _ := net.ParseMAC(fmt.Sprintf("%02x:%02x:%02x:%02x:%02x:%02x", buf[0], buf[1], buf[2], buf[3], buf[4], buf[5]))
 	return mac
-}
-
-func (c *ARPClient) deleteVirtualMAC(ip net.IP) {
-	virtual := c.ARPFindIP(ip)
-
-	if virtual == nil || (virtual != nil && virtual.State != ARPStateVirtualHost) {
-		//	log.Errorf("ARP error non-existent virtual IP %s", ip)
-		return
-	}
-
-	virtual.State = ARPStateDeleted
-	virtual.IP = net.IPv4zero
 }
