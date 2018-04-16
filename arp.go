@@ -158,17 +158,6 @@ func (c *ARPClient) Request(srcHwAddr net.HardwareAddr, srcIP net.IP, dstIP net.
 	return c.request(srcHwAddr, srcIP, dstIP)
 }
 
-// ARPRequest send an ARP Request packet using a new socket client underneath. it does not
-func DONTARPRequest(nic string, srcHwAddr net.HardwareAddr, srcIP net.IP, dstIP net.IP) error {
-	log.WithFields(log.Fields{"clientmac": srcHwAddr.String(), "clientip": srcIP.String()}).Debugf("ARP send request who is %s tell %s", dstIP.String(), srcIP.String())
-	c, err := NewARPClient(nic, net.HardwareAddr{}, net.IP{}, net.IP{}, net.IPNet{})
-	if err != nil {
-		return err
-	}
-
-	return c.request(srcHwAddr, srcIP, dstIP)
-}
-
 // ARPReply send ARP reply from the src to the dst
 //
 // Call with dstHwAddr = ethernet.Broadcast to reply to all
@@ -230,10 +219,14 @@ func (c *ARPClient) arpScanLoop(refreshDuration time.Duration) error {
 
 			log.Info("ARP refresh online devices")
 			for i := range table {
-				// Don't probe if we received an update recently or if the device is offline.
-				if table[i].State == ARPStateNormal &&
-					table[i].Online == true &&
-					table[i].LastUpdate.Before(refreshThreshold) {
+				if table[i].State != ARPStateNormal {
+					continue
+				}
+				// probe only in these two cases:
+				//   1) device is online and have not received an update recently; or
+				//   2) device is offline and no more than one hour has passed.
+				if (table[i].Online == true && table[i].LastUpdate.Before(refreshThreshold)) ||
+					(table[i].Online == false && table[i].LastUpdate.After(now.Add(time.Minute*60))) {
 					log.Infof("ARP refresh ip %s", table[i].IP)
 					err := c.request(c.config.HostMAC, c.config.HostIP, table[i].IP) // Request
 					if err != nil {
@@ -243,11 +236,12 @@ func (c *ARPClient) arpScanLoop(refreshDuration time.Duration) error {
 					time.Sleep(time.Millisecond * 15)
 
 					if table[i].LastUpdate.Before(offlineThreshold) {
-						table[i].Online = false
-
-						// Notify upstream the device changed to offline
-						if c.notification != nil {
-							c.notification <- table[i]
+						if table[i].Online == false {
+							table[i].Online = false
+							// Notify upstream the device changed to offline
+							if c.notification != nil {
+								c.notification <- table[i]
+							}
 						}
 					}
 				}
