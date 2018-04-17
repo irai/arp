@@ -219,7 +219,8 @@ func (c *ARPClient) arpScanLoop(refreshDuration time.Duration) error {
 
 			log.Info("ARP refresh online devices")
 			for i := range table {
-				if table[i].State != ARPStateNormal {
+				if table[i].State == ARPStateHunt {
+					log.Infof("ARP skip ip %s in hunt state", table[i].IP)
 					continue
 				}
 				// probe only in these two cases:
@@ -237,6 +238,8 @@ func (c *ARPClient) arpScanLoop(refreshDuration time.Duration) error {
 
 					if table[i].LastUpdate.Before(offlineThreshold) {
 						if table[i].Online == true {
+							log.Warnf("ARP device went offline ip %s", table[i].IP)
+
 							table[i].Online = false
 							// Notify upstream the device changed to offline
 							if c.notification != nil {
@@ -440,7 +443,7 @@ func (c *ARPClient) ARPListenAndServe(scanInterval time.Duration) {
 
 		}
 
-		if notify >= 0 && c.notification != nil {
+		if notify > 0 && c.notification != nil {
 			c.notification <- *sender
 		}
 	}
