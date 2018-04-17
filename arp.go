@@ -236,7 +236,7 @@ func (c *ARPClient) arpScanLoop(refreshDuration time.Duration) error {
 					time.Sleep(time.Millisecond * 15)
 
 					if table[i].LastUpdate.Before(offlineThreshold) {
-						if table[i].Online == false {
+						if table[i].Online == true {
 							table[i].Online = false
 							// Notify upstream the device changed to offline
 							if c.notification != nil {
