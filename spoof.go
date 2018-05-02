@@ -12,7 +12,9 @@ import (
 // ARPSpoof send a gratuitous ARP packet to spoof client MAC table to send router packets to host instead of the router
 // i.e.  192.168.0.1->RouterMAC becames 192.168.0.1->HostMAC
 //
-// Spoof only last for a short while (few minutes) hence the goroutine that re-arp clients
+// The client ARP table is refreshed often and only last for a short while (few minutes)
+// hence the goroutine that re-arp clients
+// To make sure the cache stays poisoned, replay every 10 seconds with a loop.
 //
 //
 func (c *ARPClient) ARPSpoof(client *ARPEntry) error {
@@ -70,7 +72,7 @@ func (c *ARPClient) ARPIPChanged(clientHwAddr net.HardwareAddr, clientIP net.IP)
 }
 
 // ARPForceIPChange performs the following:
-//  1. set client state to "capture" resetting the client IP in the process.
+//  1. set client state to "hunt" resetting the client IP in the process.
 //  2. create a virtual host to handle the reallocated IP
 //  3. spoof the client IP to redirect all traffic to host
 //  4. set a callback when we receive a request from this client
@@ -100,9 +102,8 @@ func (c *ARPClient) ARPForceIPChange(clientHwAddr net.HardwareAddr, clientIP net
 
 	// Create a virtual host to handle this IP
 	virtual := c.arpTableAppend(ARPStateVirtualHost, ARPNewVirtualMAC(), clientIP)
-	// virtual.callback = arpReplyVirtualMAC
 
-	// Set client state to capture and reset IP address
+	// Set client state to hunt and reset IP address
 	c.mutex.Lock()
 	client.PreviousIP = net.ParseIP(client.IP.String()).To4()
 	client.IP = net.IPv4zero
@@ -261,14 +262,15 @@ func (c *ARPClient) actionClaimIP(client *ARPEntry, senderMAC net.HardwareAddr, 
 
 	for i := 0; i < 3; i++ {
 		/****
-		  This causes a loop when the client is replying quickly
-		  		err := ARPRequest(virtual.MAC, virtual.IP, virtual.IP) // Send ARP announcement
-		  		if err != nil {
-		  			log.WithFields(log.Fields{"clientmac": virtual.MAC.String(), "clientip": virtual.IP.String()}).Error("ARP error send announcement packet", err)
-		  			return err
-		  		}
-		  		time.Sleep(time.Millisecond * 4)
+		  ARP request causes a loop when the client is replying quickly
 		  ****/
+		err := c.request(virtual.MAC, virtual.IP, virtual.IP) // Send ARP announcement
+		if err != nil {
+			log.WithFields(log.Fields{"clientmac": virtual.MAC.String(), "clientip": virtual.IP.String()}).Error("ARP error send announcement packet", err)
+			return err
+		}
+		time.Sleep(time.Millisecond * 4)
+
 		c.ARPReply(virtual.MAC, virtual.IP, client.MAC, virtual.IP) // Send gratuitous ARP reply
 		time.Sleep(time.Millisecond * 5)
 		err = c.ARPReply(virtual.MAC, virtual.IP, EthernetBroadcast, virtual.IP) // Send gratuitous ARP reply

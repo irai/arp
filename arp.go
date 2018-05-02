@@ -387,6 +387,11 @@ func (c *ARPClient) ARPListenAndServe(scanInterval time.Duration) {
 
 		// log.Debugf("ARP loop received packet type %v - mac %s", packet.Operation, sender.MAC.String())
 
+		// Skip packets that we sent as virtual host
+		if sender.State == ARPStateVirtualHost {
+			continue
+		}
+
 		switch packet.Operation {
 
 		// Reply to ARP request if we are spoofing this host.
