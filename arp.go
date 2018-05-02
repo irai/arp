@@ -65,14 +65,14 @@ var (
 func getArpClient(nic string) (*marp.Client, error) {
 	ifi, err := net.InterfaceByName(nic)
 	if err != nil {
-		log.Error("ARP ARPReply error in interface name", err)
+		log.Error("ARP Reply error in interface name", err)
 		return nil, err
 	}
 
 	// Set up ARP client with socket
 	c, err := marp.Dial(ifi)
 	if err != nil {
-		log.Error("ARP ARPReply error in dial", err)
+		log.Error("ARP Reply error in dial", err)
 		return nil, err
 	}
 	return c, nil
@@ -158,31 +158,24 @@ func (c *ARPClient) request(srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr 
 	return c.client.WriteTo(arp, EthernetBroadcast)
 }
 
-func (c *ARPClient) requestLog(srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr net.HardwareAddr, dstIP net.IP) error {
+func (c *ARPClient) Request(srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr net.HardwareAddr, dstIP net.IP) error {
 	if srcIP.Equal(dstIP) {
-		log.WithFields(log.Fields{"srcmac": srcHwAddr, "srcip": srcIP, "dstip": dstIP}).Infof("ARP send announcement - I am %s", dstIP)
-
+		log.WithFields(log.Fields{"srcmac": srcHwAddr, "srcip": srcIP, "dstmac": dstHwAddr, "dstip": dstIP}).Debugf("ARP send announcement - I am %s", dstIP)
 	} else {
-		log.WithFields(log.Fields{"srcmac": srcHwAddr, "srcip": srcIP, "dstip": dstIP}).Infof("ARP send request - who is %s", dstIP)
+		log.WithFields(log.Fields{"srcmac": srcHwAddr, "srcip": srcIP, "dstmac": dstHwAddr, "dstip": dstIP}).Debugf("ARP send request - who is %s", dstIP)
 	}
-	return c.request(srcHwAddr, srcIP, dstHwAddr, dstIP)
-}
-
-func (c *ARPClient) Request(srcHwAddr net.HardwareAddr, srcIP net.IP, dstIP net.IP) error {
 	return c.request(srcHwAddr, srcIP, EthernetBroadcast, dstIP)
 }
 
-// ARPReply send ARP reply from the src to the dst
+// Reply send ARP reply from the src to the dst
 //
 // Call with dstHwAddr = ethernet.Broadcast to reply to all
-func (c *ARPClient) ARPReply(srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr net.HardwareAddr, dstIP net.IP) error {
-	// c, err := getArpClient()
-	// if err != nil {
-	// return err
-	// }
-	// defer c.Close()
-
+func (c *ARPClient) Reply(srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr net.HardwareAddr, dstIP net.IP) error {
 	log.WithFields(log.Fields{"dstmac": dstHwAddr.String(), "dstip": dstIP.String()}).Warnf("ARP send reply - host %s is at %s", srcIP.String(), srcHwAddr.String())
+	return c.reply(srcHwAddr, srcIP, dstHwAddr, dstIP)
+}
+
+func (c *ARPClient) reply(srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr net.HardwareAddr, dstIP net.IP) error {
 	p, err := marp.NewPacket(marp.OperationReply, srcHwAddr, srcIP, dstHwAddr, dstIP)
 	if err != nil {
 		return err
@@ -245,7 +238,7 @@ func (c *ARPClient) arpScanLoop(refreshDuration time.Duration) error {
 					// Do not send request for devices in hunt state; the IP is zero
 					if table[i].State != ARPStateHunt {
 						// log.Infof("ARP refresh ip %s", table[i].IP)
-						err := c.requestLog(c.config.HostMAC, c.config.HostIP, EthernetBroadcast, table[i].IP) // Request
+						err := c.Request(c.config.HostMAC, c.config.HostIP, EthernetBroadcast, table[i].IP) // Request
 						if err != nil {
 							log.Error("Error ARP request: ", table[i].IP, err)
 						}
@@ -422,7 +415,7 @@ func (c *ARPClient) ARPListenAndServe(scanInterval time.Duration) {
 			target := c.ARPFindIP(packet.TargetIP)
 			if target != nil && target.State == ARPStateVirtualHost {
 				log.WithFields(log.Fields{"ip": target.IP, "mac": target.MAC}).Info("ARP sending reply for virtual mac")
-				c.ARPReply(target.MAC, target.IP, EthernetBroadcast, target.IP)
+				c.Reply(target.MAC, target.IP, EthernetBroadcast, target.IP)
 				break
 			}
 

@@ -26,18 +26,18 @@ func (c *ARPClient) ARPSpoof(client *ARPEntry) error {
 	}
 	c.mutex.Unlock()
 
-	log.WithFields(log.Fields{"clientmac": client.MAC.String(), "clientip": ip.String()}).Warn("ARP spoof client")
+	log.WithFields(log.Fields{"clientmac": client.MAC.String(), "clientip": ip.String()}).Debug("ARP spoof client")
 
 	for i := 0; i < 2; i++ {
 
-		// Unicast ARP announcement - this will not work for all devices but should cause no pai
-		err := c.requestLog(c.config.HostMAC, c.config.RouterIP, client.MAC, c.config.RouterIP)
+		// Unicast ARP announcement - this will not work for all devices but should cause no pain
+		err := c.request(c.config.HostMAC, c.config.RouterIP, client.MAC, c.config.RouterIP)
 		if err != nil {
 			log.WithFields(log.Fields{"clientmac": client.MAC.String(), "clientip": ip.String()}).Error("ARP error send announcement packet", err)
 			return err
 		}
 
-		err = c.ARPReply(c.config.HostMAC, c.config.RouterIP, client.MAC, ip)
+		err = c.reply(c.config.HostMAC, c.config.RouterIP, client.MAC, ip)
 		if err != nil {
 			log.WithFields(log.Fields{"clientmac": client.MAC.String(), "clientip": ip.String()}).Error("ARP spoof client error", err)
 			return err
@@ -45,8 +45,8 @@ func (c *ARPClient) ARPSpoof(client *ARPEntry) error {
 		time.Sleep(time.Millisecond * 10)
 
 		// NO NEED TO SPOOF THE ROUTER
-		// err := ARPReply(c.config.HostMAC, config.HomeRouterIP, client.MAC, config.HomeRouterIP)
-		// err = ARPReply(c.config.HostMAC, ip, client.MAC, config.HomeRouterIP)
+		// err := Reply(c.config.HostMAC, config.HomeRouterIP, client.MAC, config.HomeRouterIP)
+		// err = Reply(c.config.HostMAC, ip, client.MAC, config.HomeRouterIP)
 		// if err != nil {
 		// log.WithFields(log.Fields{"clientmac": client.MAC.String(), "clientip": ip.String()}).Error("ARP spoof router error", err)
 		// return err
@@ -157,13 +157,13 @@ func (c *ARPClient) ARPForceIPChange(clientHwAddr net.HardwareAddr, clientIP net
 				c.request(virtual.MAC, virtual.IP, virtual.IP) // Send ARP announcement
 
 				time.Sleep(time.Millisecond * 30)
-				// ARPReply(virtual.MAC, virtual.IP, arpClient.table[i].MAC, virtual.IP) // Send gratuitous ARP reply
+				// Reply(virtual.MAC, virtual.IP, arpClient.table[i].MAC, virtual.IP) // Send gratuitous ARP reply
 				// Send ARP reply to broadcast MAC
 
 				if client.State != ARPStateHunt {
 					return
 				}
-				c.ARPReply(virtual.MAC, virtual.IP, EthernetBroadcast, virtual.IP) // Send gratuitous ARP reply
+				c.Reply(virtual.MAC, virtual.IP, EthernetBroadcast, virtual.IP) // Send gratuitous ARP reply
 			}
 			*****/
 			time.Sleep(time.Second * 4)
@@ -197,10 +197,10 @@ func (c *ARPClient) ARPFakeIPConflict(clientHwAddr net.HardwareAddr, clientIP ne
 		for i := 0; i < 7; i++ {
 			c.request(c.config.HostMAC, clientIP, EthernetBroadcast, clientIP) // Send ARP announcement
 			time.Sleep(time.Millisecond * 10)
-			// ARPReply(virtual.MAC, virtual.IP, arpClient.table[i].MAC, virtual.IP) // Send gratuitous ARP reply
+			// Reply(virtual.MAC, virtual.IP, arpClient.table[i].MAC, virtual.IP) // Send gratuitous ARP reply
 			// Send ARP reply to broadcast MAC
 
-			c.ARPReply(c.config.HostMAC, clientIP, clientHwAddr, clientIP) // Send gratuitous ARP reply
+			c.Reply(c.config.HostMAC, clientIP, clientHwAddr, clientIP) // Send gratuitous ARP reply
 		}
 	}()
 }
@@ -290,16 +290,16 @@ func (c *ARPClient) actionClaimIP(client *ARPEntry) (err error) {
 	}
 
 	for i := 0; i < 3; i++ {
-		err := c.requestLog(virtual.MAC, virtual.IP, EthernetBroadcast, virtual.IP) // Send ARP announcement
+		err := c.Request(virtual.MAC, virtual.IP, EthernetBroadcast, virtual.IP) // Send ARP announcement
 		if err != nil {
 			log.WithFields(log.Fields{"clientmac": virtual.MAC.String(), "clientip": virtual.IP.String()}).Error("ARP error send announcement packet", err)
 			return err
 		}
 		time.Sleep(time.Millisecond * 4)
 
-		c.ARPReply(virtual.MAC, virtual.IP, client.MAC, virtual.IP) // Send gratuitous ARP reply
+		c.Reply(virtual.MAC, virtual.IP, client.MAC, virtual.IP) // Send gratuitous ARP reply
 		time.Sleep(time.Millisecond * 5)
-		err = c.ARPReply(virtual.MAC, virtual.IP, EthernetBroadcast, virtual.IP) // Send gratuitous ARP reply
+		err = c.Reply(virtual.MAC, virtual.IP, EthernetBroadcast, virtual.IP) // Send gratuitous ARP reply
 
 		if err != nil {
 			log.WithFields(log.Fields{"clientmac": client.MAC.String(), "clientip": client.IP.String()}).Error("ARP error send gratuitous packet", err)
