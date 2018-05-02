@@ -29,7 +29,15 @@ func (c *ARPClient) ARPSpoof(client *ARPEntry) error {
 	log.WithFields(log.Fields{"clientmac": client.MAC.String(), "clientip": ip.String()}).Warn("ARP spoof client")
 
 	for i := 0; i < 2; i++ {
-		err := c.ARPReply(c.config.HostMAC, c.config.RouterIP, client.MAC, ip)
+
+		// Unicast ARP announcement - this will not work for all devices but should cause no pai
+		err := c.requestLog(c.config.HostMAC, c.config.RouterIP, client.MAC, c.config.RouterIP)
+		if err != nil {
+			log.WithFields(log.Fields{"clientmac": client.MAC.String(), "clientip": ip.String()}).Error("ARP error send announcement packet", err)
+			return err
+		}
+
+		err = c.ARPReply(c.config.HostMAC, c.config.RouterIP, client.MAC, ip)
 		if err != nil {
 			log.WithFields(log.Fields{"clientmac": client.MAC.String(), "clientip": ip.String()}).Error("ARP spoof client error", err)
 			return err
@@ -47,6 +55,18 @@ func (c *ARPClient) ARPSpoof(client *ARPEntry) error {
 	}
 
 	return nil
+}
+
+func (c *ARPClient) spoofLoop(client *ARPEntry) {
+	defer log.Warn("ARP spoof loop terminated")
+
+	for {
+		if client.State != ARPStateHunt {
+			return
+		}
+		c.ARPSpoof(client)
+		time.Sleep(time.Second * 4)
+	}
 }
 
 // ARPIPChanged notify arp logic that the IP has changed.
@@ -154,6 +174,10 @@ func (c *ARPClient) ARPForceIPChange(clientHwAddr net.HardwareAddr, clientIP net
 			c.tranChannel <- *client
 		}
 		log.WithFields(log.Fields{"clientmac": client.MAC.String(), "virtualip": client.PreviousIP.String()}).Warn("ARP hunt failed")
+
+		// continue to spoof client until hunt ends
+		c.spoofLoop(client)
+
 		//actionStopHunt(client)
 	}()
 	// Redirect all client traffic to host
@@ -171,7 +195,7 @@ func (c *ARPClient) ARPFakeIPConflict(clientHwAddr net.HardwareAddr, clientIP ne
 	go func() {
 
 		for i := 0; i < 7; i++ {
-			c.request(c.config.HostMAC, clientIP, clientIP) // Send ARP announcement
+			c.request(c.config.HostMAC, clientIP, EthernetBroadcast, clientIP) // Send ARP announcement
 			time.Sleep(time.Millisecond * 10)
 			// ARPReply(virtual.MAC, virtual.IP, arpClient.table[i].MAC, virtual.IP) // Send gratuitous ARP reply
 			// Send ARP reply to broadcast MAC
@@ -266,7 +290,7 @@ func (c *ARPClient) actionClaimIP(client *ARPEntry) (err error) {
 	}
 
 	for i := 0; i < 3; i++ {
-		err := c.requestLog(virtual.MAC, virtual.IP, virtual.IP) // Send ARP announcement
+		err := c.requestLog(virtual.MAC, virtual.IP, EthernetBroadcast, virtual.IP) // Send ARP announcement
 		if err != nil {
 			log.WithFields(log.Fields{"clientmac": virtual.MAC.String(), "clientip": virtual.IP.String()}).Error("ARP error send announcement packet", err)
 			return err

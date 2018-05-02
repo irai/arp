@@ -130,6 +130,9 @@ func (c *ARPClient) Stop() error {
 // request send ARP request from src to dst
 // multiple goroutines can call request simultaneously.
 //
+// Request is almost always broadcast but unicast can be used to maintain ARP table;
+// i.e. unicast polling check for stale ARP entries; useful to test online/offline state
+//
 // ARP: packet types
 //      note that RFC 3927 specifies 00:00:00:00:00:00 for Request TargetMAC
 // +============+===+===========+===========+============+============+===================+===========+
@@ -142,7 +145,7 @@ func (c *ARPClient) Stop() error {
 // | ACD announ | 1 | broadcast | clientMAC | clientMAC  | clientIP   | ff:ff:ff:ff:ff:ff |  clientIP |
 // +============+===+===========+===========+============+============+===================+===========+
 //
-func (c *ARPClient) request(srcHwAddr net.HardwareAddr, srcIP net.IP, dstIP net.IP) error {
+func (c *ARPClient) request(srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr net.HardwareAddr, dstIP net.IP) error {
 	arp, err := marp.NewPacket(marp.OperationRequest, srcHwAddr, srcIP, EthernetBroadcast, dstIP)
 	if err != nil {
 		return err
@@ -155,18 +158,18 @@ func (c *ARPClient) request(srcHwAddr net.HardwareAddr, srcIP net.IP, dstIP net.
 	return c.client.WriteTo(arp, EthernetBroadcast)
 }
 
-func (c *ARPClient) requestLog(srcHwAddr net.HardwareAddr, srcIP net.IP, dstIP net.IP) error {
+func (c *ARPClient) requestLog(srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr net.HardwareAddr, dstIP net.IP) error {
 	if srcIP.Equal(dstIP) {
 		log.WithFields(log.Fields{"srcmac": srcHwAddr, "srcip": srcIP, "dstip": dstIP}).Infof("ARP send announcement - I am %s", dstIP)
 
 	} else {
 		log.WithFields(log.Fields{"srcmac": srcHwAddr, "srcip": srcIP, "dstip": dstIP}).Infof("ARP send request - who is %s", dstIP)
 	}
-	return c.request(srcHwAddr, srcIP, dstIP)
+	return c.request(srcHwAddr, srcIP, dstHwAddr, dstIP)
 }
 
 func (c *ARPClient) Request(srcHwAddr net.HardwareAddr, srcIP net.IP, dstIP net.IP) error {
-	return c.request(srcHwAddr, srcIP, dstIP)
+	return c.request(srcHwAddr, srcIP, EthernetBroadcast, dstIP)
 }
 
 // ARPReply send ARP reply from the src to the dst
@@ -242,7 +245,7 @@ func (c *ARPClient) arpScanLoop(refreshDuration time.Duration) error {
 					// Do not send request for devices in hunt state; the IP is zero
 					if table[i].State != ARPStateHunt {
 						// log.Infof("ARP refresh ip %s", table[i].IP)
-						err := c.requestLog(c.config.HostMAC, c.config.HostIP, table[i].IP) // Request
+						err := c.requestLog(c.config.HostMAC, c.config.HostIP, EthernetBroadcast, table[i].IP) // Request
 						if err != nil {
 							log.Error("Error ARP request: ", table[i].IP, err)
 						}
@@ -280,7 +283,7 @@ func (c *ARPClient) arpProbe() error {
 
 		// err := ARPRequest(c.config.HostMAC, net.IPv4zero, ip) // Send ARP Probe
 		// log.Debugf("ARP probe ip %s", ip.String())
-		err := c.request(c.config.HostMAC, c.config.HostIP, ip) // Request
+		err := c.request(c.config.HostMAC, c.config.HostIP, EthernetBroadcast, ip) // Request
 		if err != nil {
 			log.Error("ARP request error ", err)
 			if err1, ok := err.(net.Error); ok && err1.Temporary() {
@@ -298,9 +301,9 @@ func (c *ARPClient) arpProbe() error {
 }
 
 func (c *ARPClient) ARPProbeIP(ip net.IP) {
-	c.request(c.config.HostMAC, c.config.HostIP, ip) // Request
+	c.request(c.config.HostMAC, c.config.HostIP, EthernetBroadcast, ip) // Request
 	time.Sleep(time.Millisecond * 50)
-	c.request(c.config.HostMAC, c.config.HostIP, ip) // Request
+	c.request(c.config.HostMAC, c.config.HostIP, EthernetBroadcast, ip) // Request
 }
 
 func (c *ARPClient) actionUpdateClient(client *ARPEntry, senderMAC net.HardwareAddr, senderIP net.IP) int {
