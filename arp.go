@@ -154,6 +154,17 @@ func (c *ARPClient) request(srcHwAddr net.HardwareAddr, srcIP net.IP, dstIP net.
 
 	return c.client.WriteTo(arp, EthernetBroadcast)
 }
+
+func (c *ARPClient) requestLog(srcHwAddr net.HardwareAddr, srcIP net.IP, dstIP net.IP) error {
+	if srcIP.Equal(dstIP) {
+		log.WithFields(log.Fields{"srcmac": srcHwAddr, "srcip": srcIP, "dstip": dstIP}).Infof("ARP send announcement - I am %s", dstIP)
+
+	} else {
+		log.WithFields(log.Fields{"srcmac": srcHwAddr, "srcip": srcIP, "dstip": dstIP}).Infof("ARP send request - who is %s", dstIP)
+	}
+	return c.request(srcHwAddr, srcIP, dstIP)
+}
+
 func (c *ARPClient) Request(srcHwAddr net.HardwareAddr, srcIP net.IP, dstIP net.IP) error {
 	return c.request(srcHwAddr, srcIP, dstIP)
 }
@@ -219,25 +230,29 @@ func (c *ARPClient) arpScanLoop(refreshDuration time.Duration) error {
 
 			log.Info("ARP refresh online devices")
 			for i := range table {
-				if table[i].State == ARPStateHunt {
-					log.Infof("ARP skip ip %s in hunt state", table[i].IP)
-					continue
-				}
 				// probe only in these two cases:
 				//   1) device is online and have not received an update recently; or
 				//   2) device is offline and no more than one hour has passed.
+				//
+				// Probe virtualHosts too so we get the real target to respond; do not set it to offline.
+				//
 				if (table[i].Online == true && table[i].LastUpdate.Before(refreshThreshold)) ||
 					(table[i].Online == false && table[i].LastUpdate.After(now.Add(time.Minute*60))) {
-					log.Infof("ARP refresh ip %s", table[i].IP)
-					err := c.request(c.config.HostMAC, c.config.HostIP, table[i].IP) // Request
-					if err != nil {
-						log.Error("Error ARP request: ", table[i].IP, err)
+
+					// Do not send request for devices in hunt state; the IP is zero
+					if table[i].State != ARPStateHunt {
+						// log.Infof("ARP refresh ip %s", table[i].IP)
+						err := c.requestLog(c.config.HostMAC, c.config.HostIP, table[i].IP) // Request
+						if err != nil {
+							log.Error("Error ARP request: ", table[i].IP, err)
+						}
+						// Give it a chance to update
+						time.Sleep(time.Millisecond * 15)
 					}
-					// Give it a chance to update
-					time.Sleep(time.Millisecond * 15)
 
 					if table[i].LastUpdate.Before(offlineThreshold) {
-						if table[i].Online == true {
+						// Ignore virtual entries - these are always online
+						if table[i].Online == true && table[i].State != ARPStateVirtualHost {
 							log.Warnf("ARP device went offline ip %s", table[i].IP)
 
 							table[i].Online = false

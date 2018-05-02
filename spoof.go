@@ -261,10 +261,7 @@ func (c *ARPClient) actionClaimIP(client *ARPEntry, senderMAC net.HardwareAddr, 
 	}
 
 	for i := 0; i < 3; i++ {
-		/****
-		  ARP request causes a loop when the client is replying quickly
-		  ****/
-		err := c.request(virtual.MAC, virtual.IP, virtual.IP) // Send ARP announcement
+		err := c.requestLog(virtual.MAC, virtual.IP, virtual.IP) // Send ARP announcement
 		if err != nil {
 			log.WithFields(log.Fields{"clientmac": virtual.MAC.String(), "clientip": virtual.IP.String()}).Error("ARP error send announcement packet", err)
 			return err
