@@ -119,6 +119,10 @@ func (c *ARPClient) ARPForceIPChange(clientHwAddr net.HardwareAddr, clientIP net
 			if client.State != ARPStateHunt {
 				return
 			}
+
+			c.actionClaimIP(client)
+
+			/*****
 			c.ARPSpoof(client)
 
 			// Send ARP announcement
@@ -141,6 +145,7 @@ func (c *ARPClient) ARPForceIPChange(clientHwAddr net.HardwareAddr, clientIP net
 				}
 				c.ARPReply(virtual.MAC, virtual.IP, EthernetBroadcast, virtual.IP) // Send gratuitous ARP reply
 			}
+			*****/
 			time.Sleep(time.Second * 4)
 		}
 
@@ -231,12 +236,12 @@ func (c *ARPClient) actionRequestInHuntState(client *ARPEntry, senderIP net.IP, 
 
 	log.Warnf("ARP client attempting to get same IP previous %s new %s", client.PreviousIP, targetIP)
 
-	err = c.actionClaimIP(client, client.MAC, targetIP)
+	err = c.actionClaimIP(client)
 
 	return 0, err
 }
 
-func (c *ARPClient) actionClaimIP(client *ARPEntry, senderMAC net.HardwareAddr, senderIP net.IP) (err error) {
+func (c *ARPClient) actionClaimIP(client *ARPEntry) (err error) {
 
 	ip := client.IP
 	c.mutex.Lock()

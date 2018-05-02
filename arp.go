@@ -451,7 +451,7 @@ func (c *ARPClient) ARPListenAndServe(scanInterval time.Duration) {
 				if !packet.SenderIP.Equal(net.IPv4zero) && !packet.SenderIP.Equal(sender.PreviousIP) {
 					notify += c.actionUpdateClient(sender, packet.SenderHardwareAddr, packet.SenderIP)
 				} else {
-					c.actionClaimIP(sender, packet.SenderHardwareAddr, packet.SenderIP)
+					c.actionClaimIP(sender)
 				}
 
 			case ARPStateVirtualHost: // Captured our own reply - Do nothing
