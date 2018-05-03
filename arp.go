@@ -152,7 +152,7 @@ func (c *ARPClient) request(srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr 
 	}
 
 	if err := c.client.SetWriteDeadline(time.Now().Add(writeTimeout)); err != nil {
-		log.Fatal(err)
+		log.Error(err)
 	}
 
 	return c.client.WriteTo(arp, EthernetBroadcast)
@@ -195,12 +195,12 @@ func (c *ARPClient) reply(srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr ne
 // refreshDuration is the the duration between full scans
 //
 // Note: ARP loop should not run when there is a hunt in progress
-func (c *ARPClient) arpScanLoop(refreshDuration time.Duration) error {
+func (c *ARPClient) arpScanLoop(refreshDuration time.Duration) (err error) {
 	// Goroutine pool
 	h := c.workers.Begin("scanloop", false)
 	defer h.End()
 
-	c.arpProbe()
+	c.discover()
 
 	// Ticker used to perform full scan
 	ticker := time.NewTicker(refreshDuration).C
@@ -209,7 +209,7 @@ func (c *ARPClient) arpScanLoop(refreshDuration time.Duration) error {
 		probe := time.NewTimer(probeInterval).C
 		select {
 		case <-ticker:
-			c.arpProbe()
+			c.discover()
 
 		case <-c.workers.StopChannel:
 			log.Info("ARP stopping probeLoop")
@@ -228,11 +228,15 @@ func (c *ARPClient) arpScanLoop(refreshDuration time.Duration) error {
 			log.Info("ARP refresh online devices")
 			for i := range table {
 
-				// Delete from ARP table
+				// Ignore virtual entries - these are always online
+				if table[i].State == ARPStateVirtualHost {
+					continue
+				}
+
+				// Delete from ARP table if the device was not seen for the last hour
 				if table[i].LastUpdate.Before(stopThreshold) {
 					if table[i].Online == true {
-						log.Error("ARP device is not offline; cannot delete")
-						continue
+						log.Error("ARP device is not offline during delete")
 					}
 					c.delete(&table[i])
 					continue
@@ -248,19 +252,22 @@ func (c *ARPClient) arpScanLoop(refreshDuration time.Duration) error {
 					(table[i].Online == false && table[i].LastUpdate.After(stopThreshold)) {
 
 					// Do not send request for devices in hunt state; the IP is zero
-					if table[i].State != ARPStateHunt {
-						// log.Infof("ARP refresh ip %s", table[i].IP)
-						err := c.Request(c.config.HostMAC, c.config.HostIP, EthernetBroadcast, table[i].IP) // Request
-						if err != nil {
-							log.Error("Error ARP request: ", table[i].IP, err)
-						}
-						// Give it a chance to update
-						time.Sleep(time.Millisecond * 15)
+					switch table[i].State {
+					case ARPStateHunt:
+						err = c.probeUnicast(table[i].MAC, table[i].PreviousIP)
+					default:
+						err = c.probeUnicast(table[i].MAC, table[i].IP)
 					}
 
+					if err != nil {
+						log.Error("Error ARP request: ", table[i].IP, table[i].MAC, err)
+					}
+
+					// Give it a chance to update
+					time.Sleep(time.Millisecond * 15)
+
 					if table[i].LastUpdate.Before(offlineThreshold) {
-						// Ignore virtual entries - these are always online
-						if table[i].Online == true && table[i].State != ARPStateVirtualHost {
+						if table[i].Online == true {
 							log.WithFields(log.Fields{"clientmac": table[i].MAC, "clientip": table[i].IP}).Warn("ARP device went offline mac")
 
 							table[i].Online = false
@@ -279,7 +286,7 @@ func (c *ARPClient) arpScanLoop(refreshDuration time.Duration) error {
 	return nil
 }
 
-func (c *ARPClient) arpProbe() error {
+func (c *ARPClient) discover() error {
 
 	// Copy underneath array so we can modify value.
 	ip := net.ParseIP(c.config.HomeLAN.IP.String()).To4()
@@ -312,8 +319,20 @@ func (c *ARPClient) arpProbe() error {
 	return nil
 }
 
-func (c *ARPClient) ARPProbeIP(ip net.IP) {
-	c.Request(c.config.HostMAC, c.config.HostIP, EthernetBroadcast, ip) // Request
+// The term 'ARP Probe' is used to refer to an ARP Request packet, broadcast on the local link,
+// with an all-zero 'sender IP address'. The 'sender hardware address' MUST contain the hardware address of the
+// interface sending the packet. The 'sender IP address' field MUST be set to all zeroes,
+// to avoid polluting ARP caches in other hosts on the same link in the case where the address turns out
+// to be already in use by another host. The 'target IP address' field MUST be set to the address being probed.
+// An ARP Probe conveys both a question ("Is anyone using this address?") and an
+// implied statement ("This is the address I hope to use.").
+func (c *ARPClient) Probe(ip net.IP) error {
+	return c.Request(c.config.HostMAC, net.IPv4zero, EthernetBroadcast, ip)
+}
+
+// probeUnicast is used to validate the client is still online; same as ARP probe but unicast to target
+func (c *ARPClient) probeUnicast(mac net.HardwareAddr, ip net.IP) error {
+	return c.Request(c.config.HostMAC, net.IPv4zero, mac, ip)
 }
 
 func (c *ARPClient) actionUpdateClient(client *ARPEntry, senderMAC net.HardwareAddr, senderIP net.IP) int {
