@@ -43,15 +43,20 @@ func (c *ARPClient) ARPSpoof(client *ARPEntry) error {
 			return err
 		}
 		time.Sleep(time.Millisecond * 10)
+	}
 
-		// NO NEED TO SPOOF THE ROUTER
-		// err := Reply(c.config.HostMAC, config.HomeRouterIP, client.MAC, config.HomeRouterIP)
-		// err = Reply(c.config.HostMAC, ip, client.MAC, config.HomeRouterIP)
-		// if err != nil {
-		// log.WithFields(log.Fields{"clientmac": client.MAC.String(), "clientip": ip.String()}).Error("ARP spoof router error", err)
-		// return err
-		// }
-		// time.Sleep(time.Millisecond * 10)
+	// Tell the network we have the ownership of the IP; all nodes will update their ARP table to us
+	virtual := c.ARPFindIP(ip)
+	if virtual == nil || virtual.State != ARPStateVirtualHost {
+		err = errors.New(fmt.Sprintf("cannot find virtual host for %s", ip.String()))
+		log.Error("ARP error virtual host", err)
+		return err
+	}
+
+	// announce that we are using this IP
+	err = c.announce(virtual.MAC, virtual.IP)
+	if err != nil {
+		log.WithFields(log.Fields{"clientmac": virtual.MAC.String(), "clientip": virtual.IP.String()}).Error("ARP error send announcement packet", err)
 	}
 
 	return nil
@@ -82,8 +87,9 @@ func (c *ARPClient) spoofLoop(client *ARPEntry) {
 			}
 
 			c.ARPSpoof(client)
+
 		}
-		time.Sleep(time.Second * 5)
+		time.Sleep(time.Second * 10)
 	}
 }
 
