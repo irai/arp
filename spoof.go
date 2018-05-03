@@ -28,15 +28,15 @@ func (c *ARPClient) ARPSpoof(client *ARPEntry) error {
 
 	log.WithFields(log.Fields{"clientmac": client.MAC.String(), "clientip": ip.String()}).Debug("ARP spoof client")
 
+	// Announce to target that we own the router IP
+	// Unicast announcement - this will not work for all devices but should cause no pain
+	err := c.announceUnicast(c.config.HostMAC, c.config.RouterIP, client.MAC)
+	if err != nil {
+		log.WithFields(log.Fields{"clientmac": client.MAC.String(), "clientip": ip.String()}).Error("ARP error send announcement packet", err)
+		return err
+	}
+
 	for i := 0; i < 2; i++ {
-
-		// Unicast ARP announcement - this will not work for all devices but should cause no pain
-		err := c.request(c.config.HostMAC, c.config.RouterIP, client.MAC, c.config.RouterIP)
-		if err != nil {
-			log.WithFields(log.Fields{"clientmac": client.MAC.String(), "clientip": ip.String()}).Error("ARP error send announcement packet", err)
-			return err
-		}
-
 		err = c.reply(c.config.HostMAC, c.config.RouterIP, client.MAC, ip)
 		if err != nil {
 			log.WithFields(log.Fields{"clientmac": client.MAC.String(), "clientip": ip.String()}).Error("ARP spoof client error", err)
@@ -57,14 +57,29 @@ func (c *ARPClient) ARPSpoof(client *ARPEntry) error {
 	return nil
 }
 
+const retryPeriod = time.Minute * 30
+
 func (c *ARPClient) spoofLoop(client *ARPEntry) {
 	defer log.Warn("ARP spoof loop terminated")
 
+	tryagain := time.Now().Add(retryPeriod)
 	for {
 		if client.State != ARPStateHunt {
 			return
 		}
-		c.ARPSpoof(client)
+
+		if client.Online {
+			now := time.Now()
+			if now.After(tryagain) {
+				c.actionClaimIP(client)
+				c.actionClaimIP(client)
+				c.actionClaimIP(client)
+				tryagain = now.Add(retryPeriod)
+				continue
+			}
+
+			c.ARPSpoof(client)
+		}
 		time.Sleep(time.Second * 4)
 	}
 }
@@ -142,30 +157,6 @@ func (c *ARPClient) ARPForceIPChange(clientHwAddr net.HardwareAddr, clientIP net
 
 			c.actionClaimIP(client)
 
-			/*****
-			c.ARPSpoof(client)
-
-			// Send ARP announcement
-			// ARPRequest(c.config.HostMAC, c.config.HostIP, arpClient.table[i].PreviousIP) // Request update
-
-			// Send gratuitous reply
-			virtual := c.ARPFindIP(client.PreviousIP)
-			if virtual != nil {
-				if client.State != ARPStateHunt {
-					return
-				}
-				c.request(virtual.MAC, virtual.IP, virtual.IP) // Send ARP announcement
-
-				time.Sleep(time.Millisecond * 30)
-				// Reply(virtual.MAC, virtual.IP, arpClient.table[i].MAC, virtual.IP) // Send gratuitous ARP reply
-				// Send ARP reply to broadcast MAC
-
-				if client.State != ARPStateHunt {
-					return
-				}
-				c.Reply(virtual.MAC, virtual.IP, EthernetBroadcast, virtual.IP) // Send gratuitous ARP reply
-			}
-			*****/
 			time.Sleep(time.Second * 4)
 		}
 
@@ -289,14 +280,13 @@ func (c *ARPClient) actionClaimIP(client *ARPEntry) (err error) {
 		return err
 	}
 
-	for i := 0; i < 3; i++ {
-		err := c.Request(virtual.MAC, virtual.IP, EthernetBroadcast, virtual.IP) // Send ARP announcement
-		if err != nil {
-			log.WithFields(log.Fields{"clientmac": virtual.MAC.String(), "clientip": virtual.IP.String()}).Error("ARP error send announcement packet", err)
-			return err
-		}
-		time.Sleep(time.Millisecond * 4)
+	// announce that we are using this IP
+	err = c.announce(virtual.MAC, virtual.IP)
+	if err != nil {
+		log.WithFields(log.Fields{"clientmac": virtual.MAC.String(), "clientip": virtual.IP.String()}).Error("ARP error send announcement packet", err)
+	}
 
+	for i := 0; i < 3; i++ {
 		c.Reply(virtual.MAC, virtual.IP, client.MAC, virtual.IP) // Send gratuitous ARP reply
 		time.Sleep(time.Millisecond * 5)
 		err = c.Reply(virtual.MAC, virtual.IP, EthernetBroadcast, virtual.IP) // Send gratuitous ARP reply

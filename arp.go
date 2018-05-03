@@ -188,6 +188,48 @@ func (c *ARPClient) reply(srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr ne
 	return c.client.WriteTo(p, dstHwAddr)
 }
 
+// The term 'ARP Probe' is used to refer to an ARP Request packet, broadcast on the local link,
+// with an all-zero 'sender IP address'. The 'sender hardware address' MUST contain the hardware address of the
+// interface sending the packet. The 'sender IP address' field MUST be set to all zeroes,
+// to avoid polluting ARP caches in other hosts on the same link in the case where the address turns out
+// to be already in use by another host. The 'target IP address' field MUST be set to the address being probed.
+// An ARP Probe conveys both a question ("Is anyone using this address?") and an
+// implied statement ("This is the address I hope to use.").
+func (c *ARPClient) Probe(ip net.IP) error {
+	return c.Request(c.config.HostMAC, net.IPv4zero, EthernetBroadcast, ip)
+}
+
+// probeUnicast is used to validate the client is still online; same as ARP probe but unicast to target
+func (c *ARPClient) probeUnicast(mac net.HardwareAddr, ip net.IP) error {
+	return c.Request(c.config.HostMAC, net.IPv4zero, mac, ip)
+}
+
+// Having probed to determine that a desired address may be used safely,
+// a host implementing this specification MUST then announce that it
+// is commencing to use this address by broadcasting ANNOUNCE_NUM ARP
+// Announcements, spaced ANNOUNCE_INTERVAL seconds apart.  An ARP
+// Announcement is identical to the ARP Probe described above, except
+// that now the sender and target IP addresses are both set to the
+// host's newly selected IPv4 address.  The purpose of these ARP
+// Announcements is to make sure that other hosts on the link do not
+// have stale ARP cache entries left over from some other host that may
+// previously have been using the same address.  The host may begin
+// legitimately using the IP address immediately after sending the first
+// of the two ARP Announcements;
+func (c *ARPClient) announce(mac net.HardwareAddr, ip net.IP) error {
+	return c.announceUnicast(mac, ip, EthernetBroadcast)
+}
+
+func (c *ARPClient) announceUnicast(mac net.HardwareAddr, ip net.IP, targetMac net.HardwareAddr) (err error) {
+	err = c.Request(mac, ip, targetMac, ip)
+	go func() {
+		time.Sleep(time.Second * 1)
+		c.Request(mac, ip, EthernetBroadcast, ip)
+		time.Sleep(time.Second * 1)
+	}()
+	return err
+}
+
 // arpScanLoop detect new MACs and also when existing MACs are no longer online.
 // Send ARP request to all 255 IP addresses first time then send ARP request every so many minutes.
 // Probe known macs more often in case they left the network.
@@ -277,7 +319,7 @@ func (c *ARPClient) checkOnline() {
 
 			if table[i].LastUpdate.Before(offlineThreshold) {
 				if table[i].Online == true {
-					log.WithFields(log.Fields{"clientmac": table[i].MAC, "clientip": table[i].IP}).Warn("ARP device went offline mac")
+					log.WithFields(log.Fields{"clientmac": table[i].MAC, "clientip": table[i].IP}).Warn("ARP device is offline")
 
 					table[i].Online = false
 					table[i].LastUpdate = now
@@ -323,22 +365,6 @@ func (c *ARPClient) discover() error {
 	}
 
 	return nil
-}
-
-// The term 'ARP Probe' is used to refer to an ARP Request packet, broadcast on the local link,
-// with an all-zero 'sender IP address'. The 'sender hardware address' MUST contain the hardware address of the
-// interface sending the packet. The 'sender IP address' field MUST be set to all zeroes,
-// to avoid polluting ARP caches in other hosts on the same link in the case where the address turns out
-// to be already in use by another host. The 'target IP address' field MUST be set to the address being probed.
-// An ARP Probe conveys both a question ("Is anyone using this address?") and an
-// implied statement ("This is the address I hope to use.").
-func (c *ARPClient) Probe(ip net.IP) error {
-	return c.Request(c.config.HostMAC, net.IPv4zero, EthernetBroadcast, ip)
-}
-
-// probeUnicast is used to validate the client is still online; same as ARP probe but unicast to target
-func (c *ARPClient) probeUnicast(mac net.HardwareAddr, ip net.IP) error {
-	return c.Request(c.config.HostMAC, net.IPv4zero, mac, ip)
 }
 
 func (c *ARPClient) actionUpdateClient(client *ARPEntry, senderMAC net.HardwareAddr, senderIP net.IP) int {
@@ -435,6 +461,7 @@ func (c *ARPClient) ARPListenAndServe(scanInterval time.Duration) {
 		if sender.Online == false {
 			sender.Online = true
 			notify += 1
+			log.WithFields(log.Fields{"clientmac": sender.MAC, "clientip": sender.IP}).Warn("ARP device is online")
 		}
 		sender.LastUpdate = time.Now()
 
@@ -491,7 +518,8 @@ func (c *ARPClient) ARPListenAndServe(scanInterval time.Duration) {
 				if !packet.SenderIP.Equal(net.IPv4zero) && !packet.SenderIP.Equal(sender.PreviousIP) {
 					notify += c.actionUpdateClient(sender, packet.SenderHardwareAddr, packet.SenderIP)
 				} else {
-					c.actionClaimIP(sender)
+
+					// c.actionClaimIP(sender)
 				}
 
 			case ARPStateVirtualHost: // Captured our own reply - Do nothing
