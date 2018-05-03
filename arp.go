@@ -164,7 +164,7 @@ func (c *ARPClient) Request(srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr 
 	} else {
 		log.WithFields(log.Fields{"srcmac": srcHwAddr, "srcip": srcIP, "dstmac": dstHwAddr, "dstip": dstIP}).Debugf("ARP send request - who is %s", dstIP)
 	}
-	return c.request(srcHwAddr, srcIP, EthernetBroadcast, dstIP)
+	return c.request(srcHwAddr, srcIP, dstHwAddr, dstIP)
 }
 
 // Reply send ARP reply from the src to the dst
@@ -233,7 +233,7 @@ func (c *ARPClient) arpScanLoop(refreshDuration time.Duration) error {
 				// Probe virtualHosts too so we get the real target to respond; do not set it to offline.
 				//
 				if (table[i].Online == true && table[i].LastUpdate.Before(refreshThreshold)) ||
-					(table[i].Online == false && table[i].LastUpdate.After(now.Add(time.Minute*60))) {
+					(table[i].Online == false && table[i].LastUpdate.Add(time.Minute*60).Before(now)) {
 
 					// Do not send request for devices in hunt state; the IP is zero
 					if table[i].State != ARPStateHunt {
@@ -249,9 +249,11 @@ func (c *ARPClient) arpScanLoop(refreshDuration time.Duration) error {
 					if table[i].LastUpdate.Before(offlineThreshold) {
 						// Ignore virtual entries - these are always online
 						if table[i].Online == true && table[i].State != ARPStateVirtualHost {
-							log.Warnf("ARP device went offline ip %s", table[i].IP)
+							log.WithFields(log.Fields{"clientmac": table[i].MAC, "clientip": table[i].IP}).Warn("ARP device went offline mac")
 
 							table[i].Online = false
+							table[i].LastUpdate = now
+
 							// Notify upstream the device changed to offline
 							if c.notification != nil {
 								c.notification <- table[i]
@@ -274,9 +276,14 @@ func (c *ARPClient) arpProbe() error {
 	for host := 1; host < 255; host++ {
 		ip[3] = byte(host)
 
-		// err := ARPRequest(c.config.HostMAC, net.IPv4zero, ip) // Send ARP Probe
-		// log.Debugf("ARP probe ip %s", ip.String())
-		err := c.request(c.config.HostMAC, c.config.HostIP, EthernetBroadcast, ip) // Request
+		// Skip entries that are online; these will be checked somewhere else
+		//
+		if entry := c.ARPFindIP(ip); entry != nil && entry.Online {
+			log.WithFields(log.Fields{"clientmac": entry.MAC, "clientip": entry.IP}).Debug("ARP skip request for online device")
+			continue
+		}
+
+		err := c.request(c.config.HostMAC, c.config.HostIP, EthernetBroadcast, ip)
 		if err != nil {
 			log.Error("ARP request error ", err)
 			if err1, ok := err.(net.Error); ok && err1.Temporary() {
@@ -294,9 +301,7 @@ func (c *ARPClient) arpProbe() error {
 }
 
 func (c *ARPClient) ARPProbeIP(ip net.IP) {
-	c.request(c.config.HostMAC, c.config.HostIP, EthernetBroadcast, ip) // Request
-	time.Sleep(time.Millisecond * 50)
-	c.request(c.config.HostMAC, c.config.HostIP, EthernetBroadcast, ip) // Request
+	c.Request(c.config.HostMAC, c.config.HostIP, EthernetBroadcast, ip) // Request
 }
 
 func (c *ARPClient) actionUpdateClient(client *ARPEntry, senderMAC net.HardwareAddr, senderIP net.IP) int {
