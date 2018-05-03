@@ -71,16 +71,19 @@ func (c *ARPClient) spoofLoop(client *ARPEntry) {
 		if client.Online {
 			now := time.Now()
 			if now.After(tryagain) {
-				c.actionClaimIP(client)
-				c.actionClaimIP(client)
-				c.actionClaimIP(client)
+				for i := 0; i < 20; i++ {
+					c.actionClaimIP(client)
+					if client.State != ARPStateHunt {
+						return
+					}
+				}
 				tryagain = now.Add(retryPeriod)
 				continue
 			}
 
 			c.ARPSpoof(client)
 		}
-		time.Sleep(time.Second * 4)
+		time.Sleep(time.Second * 5)
 	}
 }
 
