@@ -216,74 +216,80 @@ func (c *ARPClient) arpScanLoop(refreshDuration time.Duration) (err error) {
 			return nil
 
 		case <-probe:
-			c.mutex.Lock()
-			table := c.table[:]
-			c.mutex.Unlock()
+			c.checkOnline()
+		}
+	}
+	return nil
+}
 
-			now := time.Now()
-			refreshThreshold := now.Add(probeInterval * -1)  // Refresh entries last updated before this time
-			offlineThreshold := now.Add(offlineMinutes * -1) // Make offline entries last updated before this time
-			stopThreshold := now.Add(time.Minute * 60 * -1)  // Stop probing entries that have not responded in last hour
+func (c *ARPClient) checkOnline() {
 
-			log.Info("ARP refresh online devices")
-			for i := range table {
+	c.mutex.Lock()
+	table := c.table[:]
+	c.mutex.Unlock()
 
-				// Ignore virtual entries - these are always online
-				if table[i].State == ARPStateVirtualHost {
-					continue
-				}
+	now := time.Now()
+	refreshThreshold := now.Add(probeInterval * -1)  // Refresh entries last updated before this time
+	offlineThreshold := now.Add(offlineMinutes * -1) // Make offline entries last updated before this time
+	stopThreshold := now.Add(time.Minute * 60 * -1)  // Stop probing entries that have not responded in last hour
 
-				// Delete from ARP table if the device was not seen for the last hour
-				if table[i].LastUpdate.Before(stopThreshold) {
-					if table[i].Online == true {
-						log.Error("ARP device is not offline during delete")
-					}
-					c.delete(&table[i])
-					continue
-				}
+	log.Info("ARP refresh online devices")
+	for i := range table {
 
-				// probe only in these two cases:
-				//   1) device is online and have not received an update recently; or
-				//   2) device is offline and no more than one hour has passed.
-				//
-				// Probe virtualHosts too so we get the real target to respond; do not set it to offline.
-				//
-				if (table[i].Online == true && table[i].LastUpdate.Before(refreshThreshold)) ||
-					(table[i].Online == false && table[i].LastUpdate.After(stopThreshold)) {
+		// Ignore virtual entries - these are always online
+		if table[i].State == ARPStateVirtualHost {
+			continue
+		}
 
-					// Do not send request for devices in hunt state; the IP is zero
-					switch table[i].State {
-					case ARPStateHunt:
-						err = c.probeUnicast(table[i].MAC, table[i].PreviousIP)
-					default:
-						err = c.probeUnicast(table[i].MAC, table[i].IP)
-					}
+		// Delete from ARP table if the device was not seen for the last hour
+		if table[i].LastUpdate.Before(stopThreshold) {
+			if table[i].Online == true {
+				log.Error("ARP device is not offline during delete")
+			}
+			c.delete(&table[i])
+			continue
+		}
 
-					if err != nil {
-						log.Error("Error ARP request: ", table[i].IP, table[i].MAC, err)
-					}
+		var err error
+		// probe only in these two cases:
+		//   1) device is online and have not received an update recently; or
+		//   2) device is offline and no more than one hour has passed.
+		//
+		// Probe virtualHosts too so we get the real target to respond; do not set it to offline.
+		//
+		if (table[i].Online == true && table[i].LastUpdate.Before(refreshThreshold)) ||
+			(table[i].Online == false && table[i].LastUpdate.After(stopThreshold)) {
 
-					// Give it a chance to update
-					time.Sleep(time.Millisecond * 15)
+			// Do not send request for devices in hunt state; the IP is zero
+			switch table[i].State {
+			case ARPStateHunt:
+				err = c.probeUnicast(table[i].MAC, table[i].PreviousIP)
+			default:
+				err = c.probeUnicast(table[i].MAC, table[i].IP)
+			}
 
-					if table[i].LastUpdate.Before(offlineThreshold) {
-						if table[i].Online == true {
-							log.WithFields(log.Fields{"clientmac": table[i].MAC, "clientip": table[i].IP}).Warn("ARP device went offline mac")
+			if err != nil {
+				log.Error("Error ARP request: ", table[i].IP, table[i].MAC, err)
+			}
 
-							table[i].Online = false
-							table[i].LastUpdate = now
+			// Give it a chance to update
+			time.Sleep(time.Millisecond * 15)
 
-							// Notify upstream the device changed to offline
-							if c.notification != nil {
-								c.notification <- table[i]
-							}
-						}
+			if table[i].LastUpdate.Before(offlineThreshold) {
+				if table[i].Online == true {
+					log.WithFields(log.Fields{"clientmac": table[i].MAC, "clientip": table[i].IP}).Warn("ARP device went offline mac")
+
+					table[i].Online = false
+					table[i].LastUpdate = now
+
+					// Notify upstream the device changed to offline
+					if c.notification != nil {
+						c.notification <- table[i]
 					}
 				}
 			}
 		}
 	}
-	return nil
 }
 
 func (c *ARPClient) discover() error {
