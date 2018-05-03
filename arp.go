@@ -146,7 +146,7 @@ func (c *ARPClient) Stop() error {
 // +============+===+===========+===========+============+============+===================+===========+
 //
 func (c *ARPClient) request(srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr net.HardwareAddr, dstIP net.IP) error {
-	arp, err := marp.NewPacket(marp.OperationRequest, srcHwAddr, srcIP, EthernetBroadcast, dstIP)
+	arp, err := marp.NewPacket(marp.OperationRequest, srcHwAddr, srcIP, dstHwAddr, dstIP)
 	if err != nil {
 		return err
 	}
@@ -414,7 +414,7 @@ func (c *ARPClient) ARPListenAndServe(scanInterval time.Duration) {
 		//
 		case marp.OperationRequest:
 			log.WithFields(log.Fields{"clientip": sender.IP.String(), "clientmac": sender.MAC.String(),
-				"to_ip": packet.TargetIP.String()}).Debugf("ARP request received - who is %s tell %s", packet.TargetIP.String(), sender.IP.String())
+				"to_ip": packet.TargetIP.String(), "to_mac": packet.TargetHardwareAddr}).Debugf("ARP request received - who is %s tell %s", packet.TargetIP.String(), sender.IP.String())
 
 			// if target is virtual host, reply and return
 			target := c.ARPFindIP(packet.TargetIP)
@@ -439,8 +439,10 @@ func (c *ARPClient) ARPListenAndServe(scanInterval time.Duration) {
 			}
 
 		case marp.OperationReply:
-			log.WithFields(log.Fields{"clientip": sender.IP, "clientmac": sender.MAC,
-				"senderip": packet.SenderIP.String(), "target_ip": packet.TargetIP.String()}).Infof("ARP reply received - %s is at %s", packet.SenderIP.String(), sender.MAC.String())
+			log.WithFields(log.Fields{
+				"clientip": sender.IP, "clientmac": sender.MAC,
+				"senderip": packet.SenderIP.String(), "to_mac": packet.TargetHardwareAddr, "to_ip": packet.TargetIP}).
+				Infof("ARP reply received - %s is at %s", packet.SenderIP, sender.MAC)
 
 			switch sender.State {
 			case ARPStateNormal:
