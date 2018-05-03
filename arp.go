@@ -31,7 +31,7 @@ const (
 
 const (
 	probeInterval  = time.Second * 120
-	offlineMinutes = probeInterval * 2
+	offlineMinutes = probeInterval*2 + time.Minute
 )
 
 type ARPConfig struct {
@@ -221,11 +221,23 @@ func (c *ARPClient) arpScanLoop(refreshDuration time.Duration) error {
 			c.mutex.Unlock()
 
 			now := time.Now()
-			refreshThreshold := now.Add(probeInterval * -1)
-			offlineThreshold := now.Add(offlineMinutes * -1)
+			refreshThreshold := now.Add(probeInterval * -1)  // Refresh entries last updated before this time
+			offlineThreshold := now.Add(offlineMinutes * -1) // Make offline entries last updated before this time
+			stopThreshold := now.Add(time.Minute * 60 * -1)  // Stop probing entries that have not responded in last hour
 
 			log.Info("ARP refresh online devices")
 			for i := range table {
+
+				// Delete from ARP table
+				if table[i].LastUpdate.Before(stopThreshold) {
+					if table[i].Online == true {
+						log.Error("ARP device is not offline; cannot delete")
+						continue
+					}
+					c.delete(&table[i])
+					continue
+				}
+
 				// probe only in these two cases:
 				//   1) device is online and have not received an update recently; or
 				//   2) device is offline and no more than one hour has passed.
@@ -233,7 +245,7 @@ func (c *ARPClient) arpScanLoop(refreshDuration time.Duration) error {
 				// Probe virtualHosts too so we get the real target to respond; do not set it to offline.
 				//
 				if (table[i].Online == true && table[i].LastUpdate.Before(refreshThreshold)) ||
-					(table[i].Online == false && table[i].LastUpdate.Add(time.Minute*60).Before(now)) {
+					(table[i].Online == false && table[i].LastUpdate.After(stopThreshold)) {
 
 					// Do not send request for devices in hunt state; the IP is zero
 					if table[i].State != ARPStateHunt {

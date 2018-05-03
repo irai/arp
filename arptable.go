@@ -91,6 +91,18 @@ func (c *ARPClient) arpTableAppend(state arpState, clientMAC net.HardwareAddr, c
 	return ret
 }
 
+func (c *ARPClient) delete(entry *ARPEntry) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	log.WithFields(log.Fields{"clientmac": entry.MAC, "clientip": entry.IP}).
+		Infof("ARP delete entry %5v %10s previous %14s", entry.Online, entry.State, entry.PreviousIP)
+
+	entry.State = ARPStateDeleted
+	entry.IP = net.IPv4zero
+	entry.PreviousIP = net.IPv4zero
+}
+
 func (c *ARPClient) deleteVirtualMAC(ip net.IP) {
 	virtual := c.ARPFindIP(ip)
 
