@@ -30,8 +30,8 @@ const (
 )
 
 const (
-	probeInterval  = time.Second * 120
-	offlineMinutes = probeInterval*2 + time.Minute
+	checkDeviceOnlineInterval = time.Second * 120
+	offlineMinutes            = checkDeviceOnlineInterval*2 + time.Minute
 )
 
 type ARPConfig struct {
@@ -234,10 +234,10 @@ func (c *ARPClient) announceUnicast(mac net.HardwareAddr, ip net.IP, targetMac n
 // Send ARP request to all 255 IP addresses first time then send ARP request every so many minutes.
 // Probe known macs more often in case they left the network.
 //
-// refreshDuration is the the duration between full scans
+// checkNewDevicesInterval is the the duration between full scans
 //
 // Note: ARP loop should not run when there is a hunt in progress
-func (c *ARPClient) arpScanLoop(refreshDuration time.Duration) (err error) {
+func (c *ARPClient) arpScanLoop(checkNewDevicesInterval time.Duration) (err error) {
 	// Goroutine pool
 	h := c.workers.Begin("scanloop", false)
 	defer h.End()
@@ -245,19 +245,19 @@ func (c *ARPClient) arpScanLoop(refreshDuration time.Duration) (err error) {
 	c.discover()
 
 	// Ticker used to perform full scan
-	ticker := time.NewTicker(refreshDuration).C
+	checkNewDevices := time.NewTicker(checkNewDevicesInterval).C
+	checkDeviceOnline := time.NewTicker(checkDeviceOnlineInterval).C
 	for {
 		// timer for probing known macs
-		probe := time.NewTimer(probeInterval).C
 		select {
-		case <-ticker:
+		case <-checkNewDevices:
 			c.discover()
 
 		case <-c.workers.StopChannel:
 			log.Info("ARP stopping probeLoop")
 			return nil
 
-		case <-probe:
+		case <-checkDeviceOnline:
 			c.checkOnline()
 		}
 	}
@@ -271,9 +271,9 @@ func (c *ARPClient) checkOnline() {
 	c.mutex.Unlock()
 
 	now := time.Now()
-	refreshThreshold := now.Add(probeInterval * -1)  // Refresh entries last updated before this time
-	offlineThreshold := now.Add(offlineMinutes * -1) // Make offline entries last updated before this time
-	stopThreshold := now.Add(time.Minute * 60 * -1)  // Stop probing entries that have not responded in last hour
+	refreshThreshold := now.Add(checkDeviceOnlineInterval * -1) // Refresh entries last updated before this time
+	offlineThreshold := now.Add(offlineMinutes * -1)            // Mark offline entries last updated before this time
+	stopThreshold := now.Add(time.Minute * 60 * -1)             // Stop probing entries that have not responded in last hour
 
 	log.Info("ARP refresh online devices")
 	for i := range table {
