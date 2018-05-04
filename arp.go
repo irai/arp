@@ -297,17 +297,17 @@ func (c *ARPClient) checkOnline() {
 		//   1) device is online and have not received an update recently; or
 		//   2) device is offline and no more than one hour has passed.
 		//
-		// Probe virtualHosts too so we get the real target to respond; do not set it to offline.
-		//
 		if (table[i].Online == true && table[i].LastUpdate.Before(refreshThreshold)) ||
 			(table[i].Online == false && table[i].LastUpdate.After(stopThreshold)) {
 
 			// Do not send request for devices in hunt state; the IP is zero
 			switch table[i].State {
 			case ARPStateHunt:
-				err = c.probeUnicast(table[i].MAC, table[i].PreviousIP)
+				// err = c.probeUnicast(table[i].MAC, table[i].PreviousIP) // not all devices implement ACD
+				err = c.Request(c.config.HostMAC, c.config.HostIP, table[i].MAC, table[i].PreviousIP)
 			default:
-				err = c.probeUnicast(table[i].MAC, table[i].IP)
+				// err = c.probeUnicast(table[i].MAC, table[i].IP)
+				err = c.Request(c.config.HostMAC, c.config.HostIP, table[i].MAC, table[i].IP)
 			}
 
 			if err != nil {
