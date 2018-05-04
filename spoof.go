@@ -127,8 +127,8 @@ func (c *ARPClient) ARPForceIPChange(clientHwAddr net.HardwareAddr, clientIP net
 
 	client := c.ARPFindMAC(clientHwAddr.String())
 	if client == nil {
-		err := errors.New(fmt.Sprintf("ARP MAC not found"))
-		log.Error("ARP unexpected error in force DHCP", err)
+		err := errors.New(fmt.Sprintf("mac %s is not online", clientHwAddr.String()))
+		log.Warn("ARP nothing to do - ", err)
 		return err
 	}
 
