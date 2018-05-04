@@ -96,9 +96,10 @@ func (c *ARPClient) delete(entry *ARPEntry) {
 	defer c.mutex.Unlock()
 
 	log.WithFields(log.Fields{"clientmac": entry.MAC, "clientip": entry.IP}).
-		Infof("ARP delete entry %5v %10s previous %14s", entry.Online, entry.State, entry.PreviousIP)
+		Infof("ARP delete entry online %5v state %10s", entry.Online, entry.State)
 
 	entry.State = ARPStateDeleted
+	entry.MAC = net.HardwareAddr{}
 	entry.IP = net.IPv4zero
 	entry.PreviousIP = net.IPv4zero
 }
@@ -112,5 +113,7 @@ func (c *ARPClient) deleteVirtualMAC(ip net.IP) {
 	}
 
 	virtual.State = ARPStateDeleted
+	virtual.MAC = net.HardwareAddr{}
 	virtual.IP = net.IPv4zero
+	virtual.PreviousIP = net.IPv4zero
 }
