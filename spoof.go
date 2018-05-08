@@ -62,12 +62,12 @@ func (c *ARPClient) ARPSpoof(client *ARPEntry) error {
 	return nil
 }
 
-const retryPeriod = time.Minute * 30
+const retryPeriod = time.Minute * 1
 
 func (c *ARPClient) spoofLoop(client *ARPEntry) {
 	defer log.Warn("ARP spoof loop terminated")
 
-	tryagain := time.Now().Add(retryPeriod)
+	// tryagain := time.Now().Add(retryPeriod)
 	for {
 		if client.State != ARPStateHunt {
 			return
@@ -76,6 +76,7 @@ func (c *ARPClient) spoofLoop(client *ARPEntry) {
 		// Only spoof if ARP is online and ICMP packets are being received back; if not
 		// the device is dormant or not present.
 		if client.Online && icmp.Ping(client.PreviousIP) {
+			/**
 			now := time.Now()
 			if now.After(tryagain) {
 				for i := 0; i < 20; i++ {
@@ -87,11 +88,17 @@ func (c *ARPClient) spoofLoop(client *ARPEntry) {
 				tryagain = now.Add(retryPeriod)
 				continue
 			}
+			***/
 
+			c.actionClaimIP(client)
+			c.actionClaimIP(client)
+			c.actionClaimIP(client)
+			c.ARPSpoof(client)
+			c.ARPSpoof(client)
 			c.ARPSpoof(client)
 
 		}
-		time.Sleep(time.Second * 10)
+		time.Sleep(time.Second * 4)
 	}
 }
 
@@ -138,6 +145,7 @@ func (c *ARPClient) ARPForceIPChange(clientHwAddr net.HardwareAddr, clientIP net
 		log.WithFields(log.Fields{"clientmac": client.MAC.String(), "virtualip": client.PreviousIP.String()}).Info("ARP hunt start")
 		defer log.WithFields(log.Fields{"clientmac": client.MAC.String(), "virtualip": client.PreviousIP.String()}).Info("ARP hunt end")
 
+		// only attack if client is online
 		if icmp.Ping(client.PreviousIP) {
 			for i := 0; i < 20; i++ {
 				log.WithFields(log.Fields{"clientmac": client.MAC.String(), "virtualip": virtual.IP}).Infof("ARP hunt claim IP %s", virtual.IP)

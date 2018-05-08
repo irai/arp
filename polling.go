@@ -58,7 +58,8 @@ func (c *ARPClient) confirmIsActive() {
 	for i := range table {
 
 		// Ignore virtual entries - these are always online
-		if table[i].State == ARPStateVirtualHost {
+		if table[i].State == ARPStateVirtualHost ||
+			table[i].State == ARPStateDeleted {
 			continue
 		}
 
@@ -93,7 +94,7 @@ func (c *ARPClient) confirmIsActive() {
 			}
 
 			if err := c.Request(c.config.HostMAC, c.config.HostIP, table[i].MAC, ip); err != nil {
-				log.WithFields(log.Fields{"clientmac": table[i].MAC, "clientip": table[i].IP}).Error("Error ARP request: ", err)
+				log.WithFields(log.Fields{"clientmac": table[i].MAC, "clientip": ip}).Error("Error ARP request: ", err)
 			}
 
 			// Give it a chance to update
