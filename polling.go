@@ -93,7 +93,7 @@ func (c *ARPClient) confirmIsActive() {
 			}
 
 			if err := c.Request(c.config.HostMAC, c.config.HostIP, table[i].MAC, ip); err != nil {
-				log.Error("Error ARP request: ", ip, table[i].MAC, err)
+				log.WithFields(log.Fields{"clientmac": table[i].MAC, "clientip": table[i].IP}).Error("Error ARP request: ", err)
 			}
 
 			// Give it a chance to update
