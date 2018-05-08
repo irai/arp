@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	log "github.com/sirupsen/logrus"
-	"math/rand"
 	"net"
 	"time"
 )
@@ -90,28 +89,6 @@ func (c *ARPClient) spoofLoop(client *ARPEntry) {
 
 		}
 		time.Sleep(time.Second * 10)
-	}
-}
-
-// ARPIPChanged notify arp logic that the IP has changed.
-// This is likely as a result of a DHCP change. Some clients do
-// not send ARP Collision Detection packets and hence do not appear as an ARP change.
-func (c *ARPClient) ARPIPChanged(clientHwAddr net.HardwareAddr, clientIP net.IP) {
-	client := c.ARPFindMAC(clientHwAddr.String())
-	if client == nil {
-		log.WithFields(log.Fields{"clientmac": clientHwAddr, "clientip": clientIP}).Warn("ARP received new mac before arp packet")
-		c.arpTableAppend(ARPStateNormal, clientHwAddr, clientIP)
-		return
-	}
-
-	log.WithFields(log.Fields{"clientmac": clientHwAddr, "clientip": clientIP}).Info("ARP IP changed ")
-	if client.State == ARPStateHunt {
-		c.actionRequestInHuntState(client, clientIP, clientIP)
-	} else {
-		notify := c.actionUpdateClient(client, client.MAC, clientIP)
-		if notify >= 0 && c.notification != nil {
-			c.notification <- *client
-		}
 	}
 }
 
@@ -308,17 +285,4 @@ func (c *ARPClient) actionClaimIP(client *ARPEntry) (err error) {
 	}
 
 	return nil
-}
-
-func ARPNewVirtualMAC() net.HardwareAddr {
-	buf := make([]byte, 6)
-	_, err := rand.Read(buf)
-	if err != nil {
-		log.Error("ARP error in new virtual MAC", err)
-		return net.HardwareAddr{}
-	}
-	// Set the local bit
-	buf[0] = (buf[0] | 2) & 0xfe // Set local bit, ensure unicast address
-	mac, _ := net.ParseMAC(fmt.Sprintf("%02x:%02x:%02x:%02x:%02x:%02x", buf[0], buf[1], buf[2], buf[3], buf[4], buf[5]))
-	return mac
 }

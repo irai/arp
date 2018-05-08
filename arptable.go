@@ -1,10 +1,31 @@
 package arp
 
 import (
+	"fmt"
 	log "github.com/sirupsen/logrus"
+	"math/rand"
 	"net"
 	"spinifex/network"
 	"time"
+)
+
+type ARPEntry struct {
+	MAC        net.HardwareAddr
+	IP         net.IP
+	PreviousIP net.IP
+	State      arpState
+	LastUpdate time.Time
+	Online     bool
+}
+
+type arpState string
+
+const (
+	ARPStateNormal      arpState = "normal"
+	ARPStateHunt        arpState = "hunt"    // force client to change IP
+	ARPStateVirtualHost arpState = "virtual" // virtual host on the network
+	ARPStateDeleted     arpState = "deleted" // virtual host on the network
+// ARPStateCapture     = "capture" // keep arp spoofing client
 )
 
 func (c *ARPClient) ARPPrintTable() {
@@ -116,4 +137,17 @@ func (c *ARPClient) deleteVirtualMAC(ip net.IP) {
 	virtual.MAC = net.HardwareAddr{}
 	virtual.IP = net.IPv4zero
 	virtual.PreviousIP = net.IPv4zero
+}
+
+func ARPNewVirtualMAC() net.HardwareAddr {
+	buf := make([]byte, 6)
+	_, err := rand.Read(buf)
+	if err != nil {
+		log.Error("ARP error in new virtual MAC", err)
+		return net.HardwareAddr{}
+	}
+	// Set the local bit
+	buf[0] = (buf[0] | 2) & 0xfe // Set local bit, ensure unicast address
+	mac, _ := net.ParseMAC(fmt.Sprintf("%02x:%02x:%02x:%02x:%02x:%02x", buf[0], buf[1], buf[2], buf[3], buf[4], buf[5]))
+	return mac
 }
