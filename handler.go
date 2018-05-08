@@ -207,11 +207,11 @@ func (c *ARPClient) ARPListenAndServe(scanInterval time.Duration) {
 			notify += 1
 		}
 
-		// if sender.Online == false {
-		// sender.Online = true
-		// notify += 1
-		// log.WithFields(log.Fields{"clientmac": sender.MAC, "clientip": sender.IP}).Warn("ARP device is online")
-		// }
+		if sender.Online == false {
+			sender.Online = true
+			notify += 1
+			log.WithFields(log.Fields{"clientmac": sender.MAC, "clientip": sender.IP}).Warn("ARP device is online")
+		}
 		sender.LastUpdate = time.Now()
 
 		// log.Debugf("ARP loop received packet type %v - mac %s", packet.Operation, sender.MAC.String())

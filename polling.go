@@ -93,11 +93,13 @@ func (c *ARPClient) confirmIsActive() {
 				ip = table[i].IP
 			}
 
-			// if err != nil {
-			// log.Error("Error ARP request: ", table[i].IP, table[i].MAC, err)
-			// }
+			if err := c.Request(c.config.HostMAC, c.config.HostIP, table[i].MAC, ip); err != nil {
+				log.Error("Error ARP request: ", ip, table[i].MAC, err)
+			}
 
+			log.WithFields(log.Fields{"clientmac": table[i].MAC, "clientip": ip}).Info("ARP ping")
 			if ping.Ping(ip.String(), 1) {
+				log.WithFields(log.Fields{"clientmac": table[i].MAC, "clientip": ip}).Warn("ARP device is online")
 				table[i].LastUpdate = time.Now()
 				table[i].Online = true
 			}
