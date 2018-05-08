@@ -5,6 +5,7 @@ import (
 	"fmt"
 	log "github.com/sirupsen/logrus"
 	"net"
+	"spinifex/network/icmp"
 	"time"
 )
 
@@ -72,7 +73,9 @@ func (c *ARPClient) spoofLoop(client *ARPEntry) {
 			return
 		}
 
-		if client.Online {
+		// Only spoof if ARP is online and ICMP packets are being received back; if not
+		// the device is dormant or not present.
+		if client.Online && icmp.Ping(client.IP) {
 			now := time.Now()
 			if now.After(tryagain) {
 				for i := 0; i < 20; i++ {
