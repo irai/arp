@@ -1,6 +1,7 @@
 package arp
 
 import (
+	"github.com/irai/ping"
 	log "github.com/sirupsen/logrus"
 	"net"
 	"time"
@@ -71,7 +72,6 @@ func (c *ARPClient) confirmIsActive() {
 			continue
 		}
 
-		var err error
 		// probe only in these two cases:
 		//   1) device is online and have not received an update recently; or
 		//   2) device is offline and no more than one hour has passed.
@@ -79,18 +79,27 @@ func (c *ARPClient) confirmIsActive() {
 		// if (table[i].Online == true && table[i].LastUpdate.Before(refreshDeadline)) ||
 		// (table[i].Online == false && table[i].LastUpdate.After(deleteDeadline)) {
 
+		var ip net.IP
+
 		if table[i].LastUpdate.Before(refreshDeadline) {
 			switch table[i].State {
 			case ARPStateHunt:
+				ip = table[i].PreviousIP
 				// err = c.probeUnicast(table[i].MAC, table[i].PreviousIP) // not all devices implement ACD
-				err = c.Request(c.config.HostMAC, c.config.HostIP, table[i].MAC, table[i].PreviousIP)
+				// err = c.Request(c.config.HostMAC, c.config.HostIP, table[i].MAC, table[i].PreviousIP)
 			default:
 				// err = c.probeUnicast(table[i].MAC, table[i].IP)
-				err = c.Request(c.config.HostMAC, c.config.HostIP, table[i].MAC, table[i].IP)
+				// err = c.Request(c.config.HostMAC, c.config.HostIP, table[i].MAC, table[i].IP)
+				ip = table[i].IP
 			}
 
-			if err != nil {
-				log.Error("Error ARP request: ", table[i].IP, table[i].MAC, err)
+			// if err != nil {
+			// log.Error("Error ARP request: ", table[i].IP, table[i].MAC, err)
+			// }
+
+			if ping.Ping(ip.String(), 1) {
+				table[i].LastUpdate = time.Now()
+				table[i].Online = true
 			}
 
 			// Give it a chance to update
