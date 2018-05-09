@@ -133,7 +133,7 @@ func (c *ARPClient) ARPForceIPChange(clientHwAddr net.HardwareAddr, clientIP net
 	}
 
 	// Create a virtual host to handle this IP
-	virtual := c.arpTableAppend(ARPStateVirtualHost, ARPNewVirtualMAC(), clientIP)
+	c.arpTableAppend(ARPStateVirtualHost, ARPNewVirtualMAC(), clientIP)
 
 	// Set client state to hunt and reset IP address
 	c.mutex.Lock()
