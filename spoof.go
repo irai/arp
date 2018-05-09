@@ -146,6 +146,7 @@ func (c *ARPClient) ARPForceIPChange(clientHwAddr net.HardwareAddr, clientIP net
 		log.WithFields(log.Fields{"clientmac": client.MAC.String(), "virtualip": client.PreviousIP.String()}).Info("ARP hunt start")
 		defer log.WithFields(log.Fields{"clientmac": client.MAC.String(), "virtualip": client.PreviousIP.String()}).Info("ARP hunt end")
 
+		/****
 		// only attack if client is online
 		if icmp.Ping(client.PreviousIP) {
 			for i := 0; i < 20; i++ {
@@ -161,6 +162,7 @@ func (c *ARPClient) ARPForceIPChange(clientHwAddr net.HardwareAddr, clientIP net
 		} else {
 			log.WithFields(log.Fields{"clientmac": client.MAC.String(), "virtualip": client.PreviousIP.String()}).Info("ARP hunt device is offline - entering passive mode")
 		}
+		****/
 
 		// Notify if channel given
 		if c.tranChannel != nil {
