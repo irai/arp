@@ -127,8 +127,13 @@ func (c *ARPClient) actionUpdateClient(client *ARPEntry, senderMAC net.HardwareA
 func (c *ARPClient) ARPIPChanged(clientHwAddr net.HardwareAddr, clientIP net.IP) {
 	client := c.ARPFindMAC(clientHwAddr.String())
 	if client == nil {
-		log.WithFields(log.Fields{"clientmac": clientHwAddr, "clientip": clientIP}).Warn("ARP received new mac before arp packet")
+		log.WithFields(log.Fields{"clientmac": clientHwAddr, "clientip": clientIP}).Error("ARP received new mac before arp packet")
 		c.arpTableAppend(ARPStateNormal, clientHwAddr, clientIP)
+		return
+	}
+
+	// return if the IP hasn't changed
+	if client.IP.Equal(clientIP) {
 		return
 	}
 
