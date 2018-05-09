@@ -121,31 +121,38 @@ func (c *ARPClient) actionUpdateClient(client *ARPEntry, senderMAC net.HardwareA
 	return 0
 }
 
-// ARPIPChanged notify arp logic that the IP has changed.
+// IPChanged notify arp logic that the IP has changed.
 // This is likely as a result of a DHCP change. Some clients do
 // not send ARP Collision Detection packets and hence do not appear as an ARP change.
-func (c *ARPClient) ARPIPChanged(clientHwAddr net.HardwareAddr, clientIP net.IP) {
+func (c *ARPClient) IPChanged(clientHwAddr net.HardwareAddr, clientIP net.IP) {
 	client := c.ARPFindMAC(clientHwAddr.String())
-	if client == nil {
-		log.WithFields(log.Fields{"clientmac": clientHwAddr, "clientip": clientIP}).Error("ARP received new mac before arp packet")
-		c.arpTableAppend(ARPStateNormal, clientHwAddr, clientIP)
+
+	// Do nothing if we already have this mac and ip
+	if client != nil && client.IP.Equal(clientIP) {
 		return
 	}
 
-	// return if the IP hasn't changed
-	if client.IP.Equal(clientIP) {
-		return
+	log.WithFields(log.Fields{"clientmac": clientHwAddr, "clientip": clientIP}).Info("ARP new mac or ip - validating")
+	if err := c.Request(c.config.HostMAC, c.config.HostIP, EthernetBroadcast, clientIP); err != nil {
+		log.WithFields(log.Fields{"clientmac": clientHwAddr, "clientip": clientIP}).Error("ARP request failed", err)
 	}
 
-	log.WithFields(log.Fields{"clientmac": clientHwAddr, "clientip": clientIP}).Info("ARP IP changed ")
-	if client.State == ARPStateHunt {
-		c.actionRequestInHuntState(client, clientIP, clientIP)
-	} else {
-		notify := c.actionUpdateClient(client, client.MAC, clientIP)
-		if notify >= 0 && c.notification != nil {
-			c.notification <- *client
+	go func() {
+		for i := 0; i < 2; i++ {
+			time.Sleep(time.Second * 1)
+			if entry := c.ARPFindMAC(clientHwAddr.String()); entry != nil && entry.IP.Equal(clientIP) {
+				log.WithFields(log.Fields{"clientmac": clientHwAddr, "clientip": clientIP}).Info("ARP found mac")
+				return
+			}
+
+			// Silent request
+			if err := c.request(c.config.HostMAC, c.config.HostIP, EthernetBroadcast, clientIP); err != nil {
+				log.WithFields(log.Fields{"clientmac": clientHwAddr, "clientip": clientIP}).Error("ARP request 2 failed", err)
+			}
 		}
-	}
+		log.WithFields(log.Fields{"clientmac": clientHwAddr, "clientip": clientIP}).Error("ARP mac/ip pair does not exist")
+		c.ARPPrintTable()
+	}()
 }
 
 // ARPListenAndServe wait for ARP packets and action these.
