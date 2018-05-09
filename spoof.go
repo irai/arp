@@ -185,6 +185,7 @@ func (c *ARPClient) StopIPChange(clientHwAddr net.HardwareAddr) {
 	client := c.ARPFindMAC(clientHwAddr.String())
 	if client == nil {
 		log.WithFields(log.Fields{"clientmac": clientHwAddr}).Error("ARP mac not found")
+		return
 	}
 
 	if client.State == ARPStateHunt {
