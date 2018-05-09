@@ -75,7 +75,8 @@ func (c *ARPClient) spoofLoop(client *ARPEntry) {
 
 		// Only spoof if ARP is online and ICMP packets are being received back; if not
 		// the device is dormant or not present.
-		if client.Online && icmp.Ping(client.PreviousIP) {
+		// if client.Online && icmp.Ping(client.PreviousIP) {
+		if client.Online {
 			/**
 			now := time.Now()
 			if now.After(tryagain) {
@@ -178,6 +179,19 @@ func (c *ARPClient) ARPForceIPChange(clientHwAddr net.HardwareAddr, clientIP net
 	return nil
 }
 
+func (c *ARPClient) StopIPChange(clientHwAddr net.HardwareAddr) {
+	log.WithFields(log.Fields{"clientmac": clientHwAddr.String()}).Info("ARP stop IP change")
+
+	client := c.ARPFindMAC(clientHwAddr.String())
+	if client == nil {
+		log.WithFields(log.Fields{"clientmac": clientHwAddr}).Error("ARP mac not found")
+	}
+
+	if client.State == ARPStateHunt {
+		c.actionStopHunt(client)
+	}
+}
+
 // ARPFakeConflict tricks clients to send a new DHCP request to capture the name.
 // It is used to get the initial client name.
 //
@@ -199,13 +213,17 @@ func (c *ARPClient) ARPFakeIPConflict(clientHwAddr net.HardwareAddr, clientIP ne
 
 func (c *ARPClient) actionStopHunt(client *ARPEntry) {
 	log.WithFields(log.Fields{"clientmac": client.MAC.String(), "clientip": client.PreviousIP.String()}).Info("ARP hunt stop")
+
+	if client.State != ARPStateHunt {
+		log.WithFields(log.Fields{"clientmac": client.MAC.String(), "clientip": client.PreviousIP.String()}).Error("ARP client is not in hunt state")
+		return
+	}
+
 	c.deleteVirtualMAC(client.PreviousIP)
 	c.mutex.Lock()
-	if client.State == ARPStateHunt {
-		client.State = ARPStateNormal
-		client.IP = client.PreviousIP
-		client.PreviousIP = net.IPv4zero
-	}
+	client.State = ARPStateNormal
+	client.IP = client.PreviousIP
+	client.PreviousIP = net.IPv4zero
 	c.mutex.Unlock()
 }
 
