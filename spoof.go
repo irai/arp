@@ -93,7 +93,7 @@ func (c *ARPClient) spoofLoop(client *ARPEntry) {
 			c.actionClaimIP(client)
 			// c.actionClaimIP(client)
 			// c.actionClaimIP(client)
-			c.spoof(client)
+			// c.spoof(client)
 			// c.spoof(client)
 			// c.spoof(client)
 
@@ -286,7 +286,7 @@ func (c *ARPClient) actionClaimIP(client *ARPEntry) (err error) {
 	}
 	c.mutex.Unlock()
 
-	log.WithFields(log.Fields{"clientmac": client.MAC.String(), "clientip": ip.String()}).Warnf("ARP capture claim %s", ip.String())
+	log.WithFields(log.Fields{"clientmac": client.MAC.String(), "clientip": ip.String()}).Warnf("ARP claim IP %s", ip.String())
 
 	// Re-arp client so all traffic comes to host
 	// i.e. I am 192.168.0.1
@@ -307,16 +307,19 @@ func (c *ARPClient) actionClaimIP(client *ARPEntry) (err error) {
 		log.WithFields(log.Fields{"clientmac": virtual.MAC.String(), "clientip": virtual.IP.String()}).Error("ARP error send announcement packet", err)
 	}
 
+	// Show in log
+	err = c.Reply(virtual.MAC, virtual.IP, EthernetBroadcast, virtual.IP) // Send gratuitous ARP reply
 	for i := 0; i < 3; i++ {
-		c.Reply(virtual.MAC, virtual.IP, client.MAC, virtual.IP) // Send gratuitous ARP reply
-		time.Sleep(time.Millisecond * 5)
-		err = c.Reply(virtual.MAC, virtual.IP, EthernetBroadcast, virtual.IP) // Send gratuitous ARP reply
+		// c.Reply(virtual.MAC, virtual.IP, client.MAC, virtual.IP) // Send gratuitous ARP reply
+		// time.Sleep(time.Millisecond * 5)
 
 		if err != nil {
 			log.WithFields(log.Fields{"clientmac": client.MAC.String(), "clientip": client.IP.String()}).Error("ARP error send gratuitous packet", err)
-			return err
 		}
-		time.Sleep(time.Millisecond * 4)
+		time.Sleep(time.Millisecond * 10)
+
+		// Dont show in log
+		err = c.reply(virtual.MAC, virtual.IP, EthernetBroadcast, virtual.IP) // Send gratuitous ARP reply
 	}
 
 	return nil
