@@ -111,7 +111,7 @@ func (c *ARPClient) announceUnicast(mac net.HardwareAddr, ip net.IP, targetMac n
 	err = c.Request(mac, ip, targetMac, ip)
 	go func() {
 		time.Sleep(time.Second * 1)
-		c.Request(mac, ip, targetMac, ip)
+		c.request(mac, ip, targetMac, ip)
 		time.Sleep(time.Second * 1)
 	}()
 	return err

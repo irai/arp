@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// ARPSpoof send a gratuitous ARP packet to spoof client MAC table to send router packets to host instead of the router
+// spoof send a gratuitous ARP packet to spoof client MAC table to send router packets to host instead of the router
 // i.e.  192.168.0.1->RouterMAC becames 192.168.0.1->HostMAC
 //
 // The client ARP table is refreshed often and only last for a short while (few minutes)
@@ -17,7 +17,7 @@ import (
 // To make sure the cache stays poisoned, replay every 10 seconds with a loop.
 //
 //
-func (c *ARPClient) ARPSpoof(client *ARPEntry) error {
+func (c *ARPClient) spoof(client *ARPEntry) error {
 
 	ip := client.IP
 	c.mutex.Lock()
@@ -25,8 +25,6 @@ func (c *ARPClient) ARPSpoof(client *ARPEntry) error {
 		ip = client.PreviousIP
 	}
 	c.mutex.Unlock()
-
-	log.WithFields(log.Fields{"clientmac": client.MAC.String(), "clientip": ip.String()}).Debug("ARP spoof client")
 
 	// Announce to target that we own the router IP
 	// Unicast announcement - this will not work for all devices but should cause no pain
@@ -91,12 +89,13 @@ func (c *ARPClient) spoofLoop(client *ARPEntry) {
 			}
 			***/
 
+			log.WithFields(log.Fields{"clientmac": client.MAC, "clientip": client.IP}).Info("ARP spoof client")
 			c.actionClaimIP(client)
-			c.actionClaimIP(client)
-			c.actionClaimIP(client)
-			c.ARPSpoof(client)
-			c.ARPSpoof(client)
-			c.ARPSpoof(client)
+			// c.actionClaimIP(client)
+			// c.actionClaimIP(client)
+			c.spoof(client)
+			// c.spoof(client)
+			// c.spoof(client)
 
 		}
 		time.Sleep(time.Second * 4)
@@ -176,7 +175,7 @@ func (c *ARPClient) ARPForceIPChange(clientHwAddr net.HardwareAddr, clientIP net
 		//actionStopHunt(client)
 	}()
 	// Redirect all client traffic to host
-	// ARPSpoof(client)
+	// spoof(client)
 
 	return nil
 }
@@ -291,7 +290,7 @@ func (c *ARPClient) actionClaimIP(client *ARPEntry) (err error) {
 
 	// Re-arp client so all traffic comes to host
 	// i.e. I am 192.168.0.1
-	c.ARPSpoof(client)
+	c.spoof(client)
 
 	// Request ownership of the IP; this will force the client to acquire another IP
 	// Gratuitous Request will have IP = zero
