@@ -47,9 +47,9 @@ func (c *ARPClient) request(srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr 
 
 func (c *ARPClient) Request(srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr net.HardwareAddr, dstIP net.IP) error {
 	if srcIP.Equal(dstIP) {
-		log.WithFields(log.Fields{"srcmac": srcHwAddr, "srcip": srcIP, "dstmac": dstHwAddr, "dstip": dstIP}).Debugf("ARP send announcement - I am %s", dstIP)
+		log.WithFields(log.Fields{"srcmac": srcHwAddr, "srcip": srcIP, "dstmac": dstHwAddr, "dstip": dstIP}).Infof("ARP send announcement - I am %s", dstIP)
 	} else {
-		log.WithFields(log.Fields{"srcmac": srcHwAddr, "srcip": srcIP, "dstmac": dstHwAddr, "dstip": dstIP}).Debugf("ARP send request - who is %s", dstIP)
+		log.WithFields(log.Fields{"srcmac": srcHwAddr, "srcip": srcIP, "dstmac": dstHwAddr, "dstip": dstIP}).Infof("ARP send request - who is %s", dstIP)
 	}
 	return c.request(srcHwAddr, srcIP, dstHwAddr, dstIP)
 }

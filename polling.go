@@ -85,11 +85,7 @@ func (c *ARPClient) confirmIsActive() {
 			switch table[i].State {
 			case ARPStateHunt:
 				ip = table[i].PreviousIP
-				// err = c.probeUnicast(table[i].MAC, table[i].PreviousIP) // not all devices implement ACD
-				// err = c.Request(c.config.HostMAC, c.config.HostIP, table[i].MAC, table[i].PreviousIP)
 			default:
-				// err = c.probeUnicast(table[i].MAC, table[i].IP)
-				// err = c.Request(c.config.HostMAC, c.config.HostIP, table[i].MAC, table[i].IP)
 				ip = table[i].IP
 			}
 
