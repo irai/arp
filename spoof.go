@@ -75,27 +75,11 @@ func (c *ARPClient) spoofLoop(client *ARPEntry) {
 		// the device is dormant or not present.
 		// if client.Online && icmp.Ping(client.PreviousIP) {
 		if client.Online {
-			/**
-			now := time.Now()
-			if now.After(tryagain) {
-				for i := 0; i < 20; i++ {
-					c.actionClaimIP(client)
-					if client.State != ARPStateHunt {
-						return
-					}
-				}
-				tryagain = now.Add(retryPeriod)
-				continue
-			}
-			***/
 
-			log.WithFields(log.Fields{"clientmac": client.MAC, "clientip": client.IP}).Info("ARP spoof client")
+			log.WithFields(log.Fields{"clientmac": client.MAC, "clientip": client.PreviousIP}).Info("ARP spoof client")
 			c.actionClaimIP(client)
 			// c.actionClaimIP(client)
 			// c.actionClaimIP(client)
-			// c.spoof(client)
-			// c.spoof(client)
-			// c.spoof(client)
 
 		}
 		time.Sleep(time.Second * 4)
@@ -301,11 +285,13 @@ func (c *ARPClient) actionClaimIP(client *ARPEntry) (err error) {
 		return err
 	}
 
+	/***
 	// announce that we are using this IP
 	err = c.announce(virtual.MAC, virtual.IP)
 	if err != nil {
 		log.WithFields(log.Fields{"clientmac": virtual.MAC.String(), "clientip": virtual.IP.String()}).Error("ARP error send announcement packet", err)
 	}
+	***/
 
 	// Show in log
 	err = c.Reply(virtual.MAC, virtual.IP, EthernetBroadcast, virtual.IP) // Send gratuitous ARP reply
