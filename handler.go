@@ -138,8 +138,8 @@ func (c *ARPClient) IPChanged(clientHwAddr net.HardwareAddr, clientIP net.IP) {
 	}
 
 	go func() {
-		for i := 0; i < 2; i++ {
-			time.Sleep(time.Second * 1)
+		for i := 0; i < 3; i++ {
+			time.Sleep(time.Second * 2)
 			if entry := c.ARPFindMAC(clientHwAddr.String()); entry != nil && entry.IP.Equal(clientIP) {
 				log.WithFields(log.Fields{"clientmac": clientHwAddr, "clientip": clientIP}).Info("ARP found mac")
 				return
