@@ -184,7 +184,7 @@ func (c *ARPClient) ARPListenAndServe(scanInterval time.Duration) {
 	// Goroutine to continualsy scan for network devices
 	go func() {
 		if scanInterval != time.Duration(0) {
-			time.Sleep(time.Millisecond * 10)
+			time.Sleep(time.Second * 1)
 			c.pollingLoop(scanInterval)
 		}
 	}()
