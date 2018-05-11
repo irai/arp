@@ -238,8 +238,12 @@ func (c *ARPClient) ARPListenAndServe(scanInterval time.Duration) {
 		// Reply to ARP request if we are spoofing this host.
 		//
 		case marp.OperationRequest:
-			log.WithFields(log.Fields{"clientip": sender.IP.String(), "clientmac": sender.MAC.String(),
-				"to_ip": packet.TargetIP.String(), "to_mac": packet.TargetHardwareAddr}).Debugf("ARP request received - who is %s tell %s", packet.TargetIP.String(), sender.IP.String())
+			if packet.SenderIP.Equal(packet.TargetIP) {
+				log.WithFields(log.Fields{"clientmac": packet.TargetHardwareAddr, "clientip": packet.SenderIP}).Info("ARP announcement received")
+			} else {
+				log.WithFields(log.Fields{"clientip": sender.IP, "clientmac": sender.MAC,
+					"to_ip": packet.TargetIP.String(), "to_mac": packet.TargetHardwareAddr}).Debugf("ARP request received - who is %s tell %s", packet.TargetIP.String(), sender.IP.String())
+			}
 
 			// if target is virtual host, reply and return
 			target := c.ARPFindIP(packet.TargetIP)
