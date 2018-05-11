@@ -255,7 +255,8 @@ func (c *ARPClient) ARPListenAndServe(scanInterval time.Duration) {
 
 			switch sender.State {
 			case ARPStateHunt:
-				c.actionRequestInHuntState(sender, packet.SenderIP, packet.TargetIP)
+				n, _ := c.actionRequestInHuntState(sender, packet.SenderIP, packet.TargetIP)
+				notify = notify + n
 
 			case ARPStateNormal:
 				notify += c.actionUpdateClient(sender, packet.SenderHardwareAddr, packet.SenderIP)
