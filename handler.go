@@ -239,7 +239,7 @@ func (c *ARPClient) ARPListenAndServe(scanInterval time.Duration) {
 		//
 		case marp.OperationRequest:
 			if packet.SenderIP.Equal(packet.TargetIP) {
-				log.WithFields(log.Fields{"clientmac": packet.TargetHardwareAddr, "clientip": packet.SenderIP}).Info("ARP announcement received")
+				log.WithFields(log.Fields{"clientmac": sender.MAC, "clientip": packet.SenderIP}).Info("ARP announcement received")
 			} else {
 				log.WithFields(log.Fields{"clientip": sender.IP, "clientmac": sender.MAC,
 					"to_ip": packet.TargetIP.String(), "to_mac": packet.TargetHardwareAddr}).Debugf("ARP request received - who is %s tell %s", packet.TargetIP.String(), sender.IP.String())
@@ -256,7 +256,7 @@ func (c *ARPClient) ARPListenAndServe(scanInterval time.Duration) {
 			// IF ACD probe; do nothing as the sender IP is not valid yet.
 			//
 			if packet.SenderIP.Equal(net.IPv4zero) {
-				log.WithFields(log.Fields{"clientmac": packet.TargetHardwareAddr, "clientip": packet.SenderIP, "targetip": packet.TargetIP}).
+				log.WithFields(log.Fields{"clientmac": sender.MAC, "clientip": packet.SenderIP, "targetip": packet.TargetIP}).
 					Info("ARP acd probe received")
 				continue // continue the for loop
 			}
