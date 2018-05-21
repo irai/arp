@@ -224,7 +224,7 @@ func (c *ARPClient) actionRequestInHuntState(client *ARPEntry, senderIP net.IP, 
 	// | ACD announ | 1 | broadcast | clientMAC | clientMAC  | clientIP   | ff:ff:ff:ff:ff:ff |  clientIP |
 	// +============+===+===========+===========+============+============+===================+===========+
 	if !senderIP.Equal(net.IPv4zero) && !senderIP.Equal(targetIP) {
-		return
+		return 0, nil
 	}
 
 	log.WithFields(log.Fields{"clientmac": client.MAC, "clientip": client.IP}).Infof("ARP request in hunt state for %s", targetIP)

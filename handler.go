@@ -250,7 +250,15 @@ func (c *ARPClient) ARPListenAndServe(scanInterval time.Duration) {
 			if target != nil && target.State == ARPStateVirtualHost {
 				log.WithFields(log.Fields{"ip": target.IP, "mac": target.MAC}).Info("ARP sending reply for virtual mac")
 				c.Reply(target.MAC, target.IP, EthernetBroadcast, target.IP)
-				break
+				break // break the switch
+			}
+
+			// IF ACD probe; do nothing as the sender IP is not valid yet.
+			//
+			if packet.SenderIP.Equal(net.IPv4zero) {
+				log.WithFields(log.Fields{"clientmac": packet.TargetHardwareAddr, "clientip": packet.SenderIP, "targetip": packet.TargetIP}).
+					Info("ARP acd probe received")
+				continue // continue the for loop
 			}
 
 			switch sender.State {
