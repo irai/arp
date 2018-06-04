@@ -116,3 +116,20 @@ func (c *ARPClient) announceUnicast(mac net.HardwareAddr, ip net.IP, targetMac n
 	}()
 	return err
 }
+
+// WhoIs Get MAC address for IP: try 3 times
+//
+func (c *ARPClient) WhoIs(ip net.IP) (entry *ARPEntry, err error) {
+	// test first before sending request; useful for testing
+	if entry = c.ARPFindIP(ip); entry != nil {
+		return entry, nil
+	}
+	for i := 0; i < 3; i++ {
+		c.Request(c.config.HostMAC, c.config.HostIP, EthernetBroadcast, ip)
+		time.Sleep(time.Millisecond * 50)
+		if entry = c.ARPFindIP(ip); entry != nil {
+			return entry, nil
+		}
+	}
+	return nil, nil
+}
