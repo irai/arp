@@ -4,7 +4,6 @@ import (
 	marp "github.com/mdlayher/arp"
 	log "github.com/sirupsen/logrus"
 	"net"
-	"spinifex/base"
 	"sync"
 	"time"
 )
@@ -25,7 +24,7 @@ type ARPHandler struct {
 	notification chan<- ARPEntry // notification channel for state change
 	// tranChannel  chan<- ARPEntry // notification channel for arp hunt ent
 	config  configuration
-	workers base.GoroutinePool
+	workers GoroutinePool
 }
 
 var (

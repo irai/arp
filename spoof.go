@@ -5,7 +5,6 @@ import (
 	"fmt"
 	log "github.com/sirupsen/logrus"
 	"net"
-	// "spinifex/network/icmp"
 	"time"
 )
 
