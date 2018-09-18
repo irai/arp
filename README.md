@@ -4,7 +4,7 @@ The package implements a user level arp table management in golang that
 monitor the local network for ARP changes and provide notifications
 when a MAC switch between online and offline.
 
-Force IP address change (IP spoofing)
+## Force IP address change (IP spoofing)
 The most useful function is to force an IP address change by claiming
 the IP of a target MAC. It achieves this by persistently claiming the 
 IP address using ARP request/reply and activelly hunting the target MAC
@@ -26,6 +26,7 @@ Limitations
 
 
 Getting started
+---------------
 
 
 ```golang
