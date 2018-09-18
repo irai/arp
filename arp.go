@@ -32,7 +32,7 @@ var (
 // | ACD announ | 1 | broadcast | clientMAC | clientMAC  | clientIP   | ff:ff:ff:ff:ff:ff |  clientIP |
 // +============+===+===========+===========+============+============+===================+===========+
 //
-func (c *ARPClient) request(srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr net.HardwareAddr, dstIP net.IP) error {
+func (c *ARPHandler) request(srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr net.HardwareAddr, dstIP net.IP) error {
 	arp, err := marp.NewPacket(marp.OperationRequest, srcHwAddr, srcIP, dstHwAddr, dstIP)
 	if err != nil {
 		return err
@@ -45,7 +45,7 @@ func (c *ARPClient) request(srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr 
 	return c.client.WriteTo(arp, EthernetBroadcast)
 }
 
-func (c *ARPClient) Request(srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr net.HardwareAddr, dstIP net.IP) error {
+func (c *ARPHandler) Request(srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr net.HardwareAddr, dstIP net.IP) error {
 	if srcIP.Equal(dstIP) {
 		log.WithFields(log.Fields{"srcmac": srcHwAddr, "srcip": srcIP, "dstmac": dstHwAddr, "dstip": dstIP}).Infof("ARP send announcement - I am %s", dstIP)
 	} else {
@@ -57,12 +57,12 @@ func (c *ARPClient) Request(srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr 
 // Reply send ARP reply from the src to the dst
 //
 // Call with dstHwAddr = ethernet.Broadcast to reply to all
-func (c *ARPClient) Reply(srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr net.HardwareAddr, dstIP net.IP) error {
+func (c *ARPHandler) Reply(srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr net.HardwareAddr, dstIP net.IP) error {
 	log.WithFields(log.Fields{"dstmac": dstHwAddr.String(), "dstip": dstIP.String()}).Warnf("ARP send reply - host %s is at %s", srcIP.String(), srcHwAddr.String())
 	return c.reply(srcHwAddr, srcIP, dstHwAddr, dstIP)
 }
 
-func (c *ARPClient) reply(srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr net.HardwareAddr, dstIP net.IP) error {
+func (c *ARPHandler) reply(srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr net.HardwareAddr, dstIP net.IP) error {
 	p, err := marp.NewPacket(marp.OperationReply, srcHwAddr, srcIP, dstHwAddr, dstIP)
 	if err != nil {
 		return err
@@ -82,12 +82,12 @@ func (c *ARPClient) reply(srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr ne
 // to be already in use by another host. The 'target IP address' field MUST be set to the address being probed.
 // An ARP Probe conveys both a question ("Is anyone using this address?") and an
 // implied statement ("This is the address I hope to use.").
-func (c *ARPClient) Probe(ip net.IP) error {
+func (c *ARPHandler) Probe(ip net.IP) error {
 	return c.Request(c.config.HostMAC, net.IPv4zero, EthernetBroadcast, ip)
 }
 
 // probeUnicast is used to validate the client is still online; same as ARP probe but unicast to target
-func (c *ARPClient) probeUnicast(mac net.HardwareAddr, ip net.IP) error {
+func (c *ARPHandler) probeUnicast(mac net.HardwareAddr, ip net.IP) error {
 	return c.Request(c.config.HostMAC, net.IPv4zero, mac, ip)
 }
 
@@ -103,11 +103,11 @@ func (c *ARPClient) probeUnicast(mac net.HardwareAddr, ip net.IP) error {
 // previously have been using the same address.  The host may begin
 // legitimately using the IP address immediately after sending the first
 // of the two ARP Announcements;
-func (c *ARPClient) announce(mac net.HardwareAddr, ip net.IP) error {
+func (c *ARPHandler) announce(mac net.HardwareAddr, ip net.IP) error {
 	return c.announceUnicast(mac, ip, EthernetBroadcast)
 }
 
-func (c *ARPClient) announceUnicast(mac net.HardwareAddr, ip net.IP, targetMac net.HardwareAddr) (err error) {
+func (c *ARPHandler) announceUnicast(mac net.HardwareAddr, ip net.IP, targetMac net.HardwareAddr) (err error) {
 	err = c.Request(mac, ip, targetMac, ip)
 	go func() {
 		time.Sleep(time.Second * 1)
@@ -119,15 +119,15 @@ func (c *ARPClient) announceUnicast(mac net.HardwareAddr, ip net.IP, targetMac n
 
 // WhoIs Get MAC address for IP: try 3 times
 //
-func (c *ARPClient) WhoIs(ip net.IP) (entry *ARPEntry, err error) {
+func (c *ARPHandler) WhoIs(ip net.IP) (entry *ARPEntry, err error) {
 	// test first before sending request; useful for testing
-	if entry = c.ARPFindIP(ip); entry != nil {
+	if entry = c.FindIP(ip); entry != nil {
 		return entry, nil
 	}
 	for i := 0; i < 3; i++ {
 		c.Request(c.config.HostMAC, c.config.HostIP, EthernetBroadcast, ip)
 		time.Sleep(time.Millisecond * 50)
-		if entry = c.ARPFindIP(ip); entry != nil {
+		if entry = c.FindIP(ip); entry != nil {
 			return entry, nil
 		}
 	}

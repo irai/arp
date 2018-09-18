@@ -27,7 +27,7 @@ const (
 // ARPStateCapture     = "capture" // keep arp spoofing client
 )
 
-func (c *ARPClient) ARPPrintTable() {
+func (c *ARPHandler) PrintTable() {
 	log.Infof("ARP Table: %v entries", len(c.table))
 	for _, v := range c.table {
 		log.WithFields(log.Fields{"clientmac": v.MAC.String(), "clientip": v.IP.String()}).
@@ -35,7 +35,7 @@ func (c *ARPClient) ARPPrintTable() {
 	}
 }
 
-func (c *ARPClient) ARPFindMAC(mac string) *ARPEntry {
+func (c *ARPHandler) FindMAC(mac string) *ARPEntry {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
@@ -47,7 +47,7 @@ func (c *ARPClient) ARPFindMAC(mac string) *ARPEntry {
 	return nil
 }
 
-func (c *ARPClient) ARPFindIP(ip net.IP) *ARPEntry {
+func (c *ARPHandler) FindIP(ip net.IP) *ARPEntry {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
@@ -63,7 +63,7 @@ func (c *ARPClient) ARPFindIP(ip net.IP) *ARPEntry {
 	return nil
 }
 
-func (c *ARPClient) ARPGetTable() (table []ARPEntry) {
+func (c *ARPHandler) GetTable() (table []ARPEntry) {
 	for i := range c.table {
 		if c.table[i].State != ARPStateVirtualHost && c.table[i].State != ARPStateDeleted {
 			table = append(table, c.table[i])
@@ -72,7 +72,7 @@ func (c *ARPClient) ARPGetTable() (table []ARPEntry) {
 	return table
 }
 
-func (c *ARPClient) arpTableAppend(state arpState, clientMAC net.HardwareAddr, clientIP net.IP) (ret *ARPEntry) {
+func (c *ARPHandler) arpTableAppend(state arpState, clientMAC net.HardwareAddr, clientIP net.IP) (ret *ARPEntry) {
 	mac := DupMAC(clientMAC)    // copy the underlying slice
 	ip := DupIP(clientIP).To4() // copy the underlysing slice
 
@@ -107,11 +107,11 @@ func (c *ARPClient) arpTableAppend(state arpState, clientMAC net.HardwareAddr, c
 	// c.notification <- *ret
 	// }
 
-	c.ARPPrintTable()
+	c.PrintTable()
 	return ret
 }
 
-func (c *ARPClient) delete(entry *ARPEntry) {
+func (c *ARPHandler) delete(entry *ARPEntry) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
@@ -124,8 +124,8 @@ func (c *ARPClient) delete(entry *ARPEntry) {
 	entry.PreviousIP = net.IPv4zero
 }
 
-func (c *ARPClient) deleteVirtualMAC(ip net.IP) {
-	virtual := c.ARPFindIP(ip)
+func (c *ARPHandler) deleteVirtualMAC(ip net.IP) {
+	virtual := c.FindIP(ip)
 
 	if virtual == nil || (virtual != nil && virtual.State != ARPStateVirtualHost) {
 		//	log.Errorf("ARP error non-existent virtual IP %s", ip)

@@ -18,14 +18,14 @@ type configuration struct {
 	HomeLAN   net.IPNet        `yaml:"-"`
 }
 
-type ARPClient struct {
+type ARPHandler struct {
 	client       *marp.Client
 	mutex        sync.Mutex
 	table        []ARPEntry
 	notification chan<- ARPEntry // notification channel for state change
-	tranChannel  chan<- ARPEntry // notification channel for arp hunt ent
-	config       configuration
-	workers      base.GoroutinePool
+	// tranChannel  chan<- ARPEntry // notification channel for arp hunt ent
+	config  configuration
+	workers base.GoroutinePool
 }
 
 var (
@@ -48,8 +48,8 @@ func getArpClient(nic string) (*marp.Client, error) {
 	return c, nil
 }
 
-func NewARPClient(nic string, hostMAC net.HardwareAddr, hostIP net.IP, routerIP net.IP, homeLAN net.IPNet) (c *ARPClient, err error) {
-	c = &ARPClient{}
+func NewHandler(nic string, hostMAC net.HardwareAddr, hostIP net.IP, routerIP net.IP, homeLAN net.IPNet) (c *ARPHandler, err error) {
+	c = &ARPHandler{}
 	c.client, err = getArpClient(nic)
 	if err != nil {
 		log.WithFields(log.Fields{"nic": nic}).Error("ARP error in dial", err)
@@ -71,24 +71,17 @@ func NewARPClient(nic string, hostMAC net.HardwareAddr, hostIP net.IP, routerIP 
 	return c, nil
 }
 
-// AddNotificationChannel set notification channel for new ARP entries. It will
-// automatically send notification for each entry in ARP table.
+// AddNotificationChannel set the notification channel for when the ARPEntry
+// switch state between online and offline.
 //
-func (c *ARPClient) AddNotificationChannel(notification chan<- ARPEntry) {
+func (c *ARPHandler) AddNotificationChannel(notification chan<- ARPEntry) {
 	c.notification = notification
 	for i := range c.table {
 		c.notification <- c.table[i]
 	}
 }
 
-// AddTransitionChannel set transition channel for ARP entries. Used to notify of
-// ARPHunt end.
-//
-func (c *ARPClient) AddTransitionChannel(channel chan<- ARPEntry) {
-	c.tranChannel = channel
-}
-
-func (c *ARPClient) Stop() error {
+func (c *ARPHandler) Stop() error {
 
 	// Close the arp socket
 	c.client.Close()
@@ -97,7 +90,7 @@ func (c *ARPClient) Stop() error {
 	return c.workers.Stop()
 }
 
-func (c *ARPClient) actionUpdateClient(client *ARPEntry, senderMAC net.HardwareAddr, senderIP net.IP) int {
+func (c *ARPHandler) actionUpdateClient(client *ARPEntry, senderMAC net.HardwareAddr, senderIP net.IP) int {
 	// client.LastUpdate = time.Now()
 
 	// Update IP if client changed
@@ -121,11 +114,15 @@ func (c *ARPClient) actionUpdateClient(client *ARPEntry, senderMAC net.HardwareA
 	return 0
 }
 
-// IPChanged notify arp logic that the IP has changed.
-// This is likely as a result of a DHCP change. Some clients do
-// not send ARP Collision Detection packets and hence do not appear as an ARP change.
-func (c *ARPClient) IPChanged(clientHwAddr net.HardwareAddr, clientIP net.IP) {
-	client := c.ARPFindMAC(clientHwAddr.String())
+// IPChanged is used to notify that the IP has changed.
+//
+// The package will detect IP changes automatically however some clients do not
+// send ARP Collision Detection packets and hence do not appear as an immediate change.
+// This method is used to accelerate the change for example when a
+// new DHCP entry has been allocated.
+//
+func (c *ARPHandler) IPChanged(clientHwAddr net.HardwareAddr, clientIP net.IP) {
+	client := c.FindMAC(clientHwAddr.String())
 
 	// Do nothing if we already have this mac and ip
 	if client != nil && client.IP.Equal(clientIP) {
@@ -140,7 +137,7 @@ func (c *ARPClient) IPChanged(clientHwAddr net.HardwareAddr, clientIP net.IP) {
 	go func() {
 		for i := 0; i < 5; i++ {
 			time.Sleep(time.Second * 2)
-			if entry := c.ARPFindMAC(clientHwAddr.String()); entry != nil && entry.IP.Equal(clientIP) {
+			if entry := c.FindMAC(clientHwAddr.String()); entry != nil && entry.IP.Equal(clientIP) {
 				log.WithFields(log.Fields{"clientmac": clientHwAddr, "clientip": clientIP}).Info("ARP found mac")
 				return
 			}
@@ -151,32 +148,28 @@ func (c *ARPClient) IPChanged(clientHwAddr net.HardwareAddr, clientIP net.IP) {
 			}
 		}
 		log.WithFields(log.Fields{"clientmac": clientHwAddr, "clientip": clientIP}).Error("ARP mac/ip pair does not exist")
-		c.ARPPrintTable()
+		c.PrintTable()
 	}()
 }
 
-// ARPListenAndServe wait for ARP packets and action these.
+// ListenAndServe wait for ARP packets and action these.
 //
-// State table:
-//   from = sender mac
-//   to   = target IP
+// parameters:
+//   scanInterval - frequency to poll existing MACs to ensure they are online
 //
-// Request   from_MAC  to_IP     action1               action 2
-//           normal    router    actionUpdateTable
-//           normal    host      actionUpdateTable (linux to respond)
-//           normal    new       actionUpdateTable
-//           normal    normal    actionUpdateTable
-//           normal    virtual   actionReply
-//           capture   router    actionClaimIP
-//           capture   host      actionClaimIP
-//           capture   new       actionDHCP (the client is changing IP?)
-//           capture   virtual   actionClaimIP (gratuitous announcement?)
-//           capture   normal    actionClaimIP
-//           router    virtual   actionReply
-// Reply     from_MAC  to_IP     action1               action 2
-//           normal    host      actionUpdateTable
-//           capture   host      actionClaimIP (the client still claim the IP)
-func (c *ARPClient) ARPListenAndServe(scanInterval time.Duration) {
+// When a new MAC is detected, it is automatically added to the ARP table and marked as online.
+//
+// Online and offline notifications
+// It will track when a MAC switch between online and offline and will send a message
+// in the notification channel set via AddNotificationChannel(). It will poll each known device
+// based on the scanInterval parameter using a unicast ARP request.
+//
+//
+// Virtual MACs
+// A virtual MAC is a fake mac address used when claiming an existing IP during spoofing.
+// ListenAndServe will send ARP reply on behalf of virtual MACs
+//
+func (c *ARPHandler) ListenAndServe(scanInterval time.Duration) {
 	// Goroutine pool
 	h := c.workers.Begin("listenandserve", true)
 	defer h.End()
@@ -195,7 +188,7 @@ func (c *ARPClient) ARPListenAndServe(scanInterval time.Duration) {
 		return
 	}
 
-	// Loop and wait for replies
+	// Loop and wait for ARP packets
 	for {
 
 		packet, _, err := c.client.Read()
@@ -211,7 +204,7 @@ func (c *ARPClient) ARPListenAndServe(scanInterval time.Duration) {
 
 		notify := 0
 
-		sender := c.ARPFindMAC(packet.SenderHardwareAddr.String())
+		sender := c.FindMAC(packet.SenderHardwareAddr.String())
 		if sender == nil {
 			// If new client, the create a new entry in table
 			// NOTE: if this is a probe, the sender IP will be Zeros
@@ -228,7 +221,7 @@ func (c *ARPClient) ARPListenAndServe(scanInterval time.Duration) {
 
 		// log.Debugf("ARP loop received packet type %v - mac %s", packet.Operation, sender.MAC.String())
 
-		// Skip packets that we sent as virtual host
+		// Skip packets that we sent as virtual host (i.e. we sent these)
 		if sender.State == ARPStateVirtualHost {
 			continue
 		}
@@ -246,7 +239,7 @@ func (c *ARPClient) ARPListenAndServe(scanInterval time.Duration) {
 			}
 
 			// if target is virtual host, reply and return
-			target := c.ARPFindIP(packet.TargetIP)
+			target := c.FindIP(packet.TargetIP)
 			if target != nil && target.State == ARPStateVirtualHost {
 				log.WithFields(log.Fields{"ip": target.IP, "mac": target.MAC}).Info("ARP sending reply for virtual mac")
 				c.Reply(target.MAC, target.IP, EthernetBroadcast, target.IP)
@@ -297,7 +290,6 @@ func (c *ARPClient) ARPListenAndServe(scanInterval time.Duration) {
 				}
 
 			case ARPStateVirtualHost: // Captured our own reply - Do nothing
-			// arpReplyVirtualMAC(packet.SenderHardwareAddr, packet.SenderIP, packet.TargetHardwareAddr, packet.TargetIP)
 
 			default:
 				log.WithFields(log.Fields{"clientip": sender.IP, "clientmac": sender.MAC}).Error("ARP unexpected client state in reply =", sender.State)

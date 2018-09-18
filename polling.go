@@ -16,7 +16,7 @@ const (
 //
 // checkNewDevicesInterval is the the duration between full scans
 //
-func (c *ARPClient) pollingLoop(checkNewDevicesInterval time.Duration) (err error) {
+func (c *ARPHandler) pollingLoop(checkNewDevicesInterval time.Duration) (err error) {
 	// Goroutine pool
 	h := c.workers.Begin("scanloop", false)
 	defer h.End()
@@ -43,7 +43,7 @@ func (c *ARPClient) pollingLoop(checkNewDevicesInterval time.Duration) (err erro
 	return nil
 }
 
-func (c *ARPClient) confirmIsActive() {
+func (c *ARPHandler) confirmIsActive() {
 
 	c.mutex.Lock()
 	table := c.table[:]
@@ -113,7 +113,7 @@ func (c *ARPClient) confirmIsActive() {
 	}
 }
 
-func (c *ARPClient) scanNetwork() error {
+func (c *ARPHandler) scanNetwork() error {
 
 	// Copy underneath array so we can modify value.
 	ip := net.ParseIP(c.config.HomeLAN.IP.String()).To4()
@@ -124,7 +124,7 @@ func (c *ARPClient) scanNetwork() error {
 
 		// Skip entries that are online; these will be checked somewhere else
 		//
-		if entry := c.ARPFindIP(ip); entry != nil && entry.Online {
+		if entry := c.FindIP(ip); entry != nil && entry.Online {
 			log.WithFields(log.Fields{"clientmac": entry.MAC, "clientip": entry.IP}).Debug("ARP skip request for online device")
 			continue
 		}
