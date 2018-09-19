@@ -34,7 +34,8 @@ Getting started
 	$ cd $GOPATH/src/github.com/irai/arp/examples
 	$ go install
 	$ $GOPATH/bin/arplistener -i eth0
-	
+```
+
 Create your own listener in a goroutine
 ---------------------------------------
 Simply create a new handler and run ListenAndServe in a goroutine. The goroutine will
