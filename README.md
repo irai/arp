@@ -33,7 +33,7 @@ Getting started
 	$ go get github.com/sirupsen/logrus
 	$ cd $GOPATH/src/github.com/irai/arp/examples
 	$ go install
-	$ $GOPATH/bin/arplistener -i eth0
+	$ sudo $GOPATH/bin/arplistener -i eth0
 ```
 
 Create your own listener in a goroutine
