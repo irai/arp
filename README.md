@@ -43,6 +43,25 @@ Getting started
 	c.PrintTable()
 ```
 
+Listen to changes to mac table
+```golang
+    arpChannel := make(chan arp.ARPEntry, 16)
+	c.AddNotificationChannel(arpChannel)
+
+	go arpNotification(arpChannel)
+```
+
+```golang
+func arpNotification(arpChannel chan arp.ARPEntry) {
+	for {
+		select {
+		case entry := <-arpChannel:
+			log.WithFields(log.Fields{"mac": entry.MAC.String(), "ip": entry.IP.String()}).Warnf("notification got ARP entry for %s", entry.MAC)
+
+		}
+	}
+}
+```
 
 To force an IP change simply invoke ForceIPChange with the current mac and ip value.
 ```golang

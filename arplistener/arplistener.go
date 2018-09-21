@@ -27,7 +27,7 @@ dstMACFlag = flag.String("dmac", "", "dst MAC for reply packet i.e -mac 6e:a7:e6
 func main() {
 	flag.Parse()
 
-	SetLogLevel("debug")
+	SetLogLevel("info")
 
 	NIC := *ifaceFlag
 
@@ -47,11 +47,25 @@ func main() {
 
 	go c.ListenAndServe(time.Second * 30 * 5)
 
-	c.PrintTable()
+	arpChannel := make(chan arp.ARPEntry, 16)
+	c.AddNotificationChannel(arpChannel)
+
+	go arpNotification(arpChannel)
+
 	cmd(c)
 
 	c.Stop()
 
+}
+
+func arpNotification(arpChannel chan arp.ARPEntry) {
+	for {
+		select {
+		case entry := <-arpChannel:
+			log.WithFields(log.Fields{"mac": entry.MAC.String(), "ip": entry.IP.String()}).Warnf("notification got ARP entry for %s", entry.MAC)
+
+		}
+	}
 }
 
 func cmd(c *arp.ARPHandler) {
@@ -72,16 +86,18 @@ func cmd(c *arp.ARPHandler) {
 			return
 		case 'g':
 			if len(text) < 3 {
-				log.Error("Invalid level")
-				break
+				text = text + "   "
 			}
 			err := SetLogLevel(text[2:])
 			if err != nil {
-				log.Error("invalid level (fatal, debug, info, error) ", err)
+				log.Error("invalid level. valid levels (error, warn, info, debug) ", err)
 				break
 			}
 		case 'l':
+			l := log.GetLevel()
+			SetLogLevel("info") // quick hack to print table
 			c.PrintTable()
+			log.SetLevel(l)
 		case 'f':
 			entry := getMAC(c, text)
 			if entry != nil {
@@ -150,15 +166,13 @@ func NICGetInformation(nic string) (ip net.IP, mac net.HardwareAddr, err error) 
 
 func SetLogLevel(level string) (err error) {
 
-	log.SetLevel(log.InfoLevel)
-
 	if level != "" {
 		l, err := log.ParseLevel(level)
-		if err == nil {
-			log.SetLevel(l)
-		} else {
-			log.Warn("Invalid log level: ", level)
+		if err != nil {
+			return err
 		}
+		log.SetLevel(l)
 	}
-	return err
+
+	return nil
 }
