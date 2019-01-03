@@ -17,7 +17,7 @@ The package uses low level arp packets to enable:
 * notification when a MAC switch between online and offline
 * forced IP address change 
 
-See the example file for how to use it.
+See the arplistener example for how to use it.
 
 Limitations
 -----------
@@ -31,7 +31,7 @@ Getting started
 	$ go get github.com/irai/arp
 	$ go get github.com/mdlayher/arp
 	$ go get github.com/sirupsen/logrus
-	$ cd $GOPATH/src/github.com/irai/arp/examples
+	$ cd $GOPATH/src/github.com/irai/arp/arplistener
 	$ go install
 	$ sudo $GOPATH/bin/arplistener -i eth0
 ```
