@@ -86,5 +86,4 @@ func (h *GoroutinePool) Stop() error {
 			return errors.New("timeout")
 		}
 	}
-	return nil
 }

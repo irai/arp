@@ -1,4 +1,5 @@
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
+github.com/konsorten/go-windows-terminal-sequences v1.0.1 h1:mweAR1A6xJ3oS2pRaGiHgQ4OO8tzTaLawm8vnODuwDk=
 github.com/konsorten/go-windows-terminal-sequences v1.0.1/go.mod h1:T0+1ngSBFLxvqU3pZ+m/2kptfBszLMUkC4ZK/EgS/cQ=
 github.com/mdlayher/arp v0.0.0-20181025151936-a1263dc4682b h1:BNv41D+PtrpTE4GosnbknmGxzVCVWKgMgO7lt/ABwOE=
 github.com/mdlayher/arp v0.0.0-20181025151936-a1263dc4682b/go.mod h1:TbmED7Z4FAdA+NfHf4HKNcEYwtYYp/L1mdXi4PN4cIc=

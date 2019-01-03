@@ -40,7 +40,6 @@ func (c *ARPHandler) pollingLoop(checkNewDevicesInterval time.Duration) (err err
 			c.confirmIsActive()
 		}
 	}
-	return nil
 }
 
 func (c *ARPHandler) confirmIsActive() {
