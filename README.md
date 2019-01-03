@@ -29,8 +29,6 @@ Getting started
 ---------------
 ```bash
 	$ go get github.com/irai/arp
-	$ go get github.com/mdlayher/arp
-	$ go get github.com/sirupsen/logrus
 	$ cd $GOPATH/src/github.com/irai/arp/arplistener
 	$ go install
 	$ sudo $GOPATH/bin/arplistener -i eth0
