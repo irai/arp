@@ -1,7 +1,6 @@
 package arp
 
 import (
-	"errors"
 	"fmt"
 	"net"
 	"time"
@@ -98,19 +97,19 @@ func (c *Handler) ForceIPChange(clientHwAddr net.HardwareAddr, clientIP net.IP) 
 
 	client := c.FindMAC(clientHwAddr)
 	if client == nil {
-		err := errors.New(fmt.Sprintf("mac %s is not online", clientHwAddr.String()))
+		err := fmt.Errorf("mac %s is not online", clientHwAddr.String())
 		log.Warn("ARP nothing to do - ", err)
 		return err
 	}
 
 	if client.State == StateHunt {
-		err := errors.New(fmt.Sprintf("client already in hunt state %s ", client.IP.String()))
+		err := fmt.Errorf("client already in hunt state %s ", client.IP.String())
 		log.Error("ARP error in ForceIPChange", err)
 		return err
 	}
 
 	if client.IP.Equal(clientIP) == false || client.IP.Equal(net.IPv4zero) {
-		err := errors.New(fmt.Sprintf("ARP capture error missmatch in client table with actual client %s vs %s", client.IP.String(), clientIP.String()))
+		err := fmt.Errorf("ARP capture error missmatch in client table with actual client %s vs %s", client.IP.String(), clientIP.String())
 		log.Error("ARP unexpected IP missmatch", err)
 		return err
 	}
@@ -137,6 +136,7 @@ func (c *Handler) ForceIPChange(clientHwAddr net.HardwareAddr, clientIP net.IP) 
 	return nil
 }
 
+// StopIPChange terminate the hunting process
 func (c *Handler) StopIPChange(clientHwAddr net.HardwareAddr) {
 	log.WithFields(log.Fields{"clientmac": clientHwAddr.String()}).Info("ARP stop IP change")
 
@@ -151,10 +151,10 @@ func (c *Handler) StopIPChange(clientHwAddr net.HardwareAddr) {
 	}
 }
 
-// ARPFakeConflict tricks clients to send a new DHCP request to capture the name.
+// FakeIPConflict tricks clients to send a new DHCP request to capture the name.
 // It is used to get the initial client name.
 //
-func (c *Handler) ARPFakeIPConflict(clientHwAddr net.HardwareAddr, clientIP net.IP) {
+func (c *Handler) FakeIPConflict(clientHwAddr net.HardwareAddr, clientIP net.IP) {
 	log.WithFields(log.Fields{"clientmac": clientHwAddr.String(), "clientip": clientIP.String()}).Warn("ARP fake IP conflict")
 
 	go func() {
