@@ -3,9 +3,10 @@ package arp
 import (
 	"errors"
 	"fmt"
-	log "github.com/sirupsen/logrus"
 	"net"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 )
 
 // spoof send a gratuitous ARP packet to spoof client MAC table to send router packets to host instead of the router
@@ -16,11 +17,11 @@ import (
 // To make sure the cache stays poisoned, replay every 10 seconds with a loop.
 //
 //
-func (c *ARPHandler) spoof(client *ARPEntry) error {
+func (c *Handler) spoof(client *Entry) error {
 
 	ip := client.IP
 	c.mutex.Lock()
-	if client.State == ARPStateHunt {
+	if client.State == StateHunt {
 		ip = client.PreviousIP
 	}
 	c.mutex.Unlock()
@@ -44,8 +45,8 @@ func (c *ARPHandler) spoof(client *ARPEntry) error {
 
 	// Tell the network we have the ownership of the IP; all nodes will update their ARP table to us
 	virtual := c.FindIP(ip)
-	if virtual == nil || virtual.State != ARPStateVirtualHost {
-		err = errors.New(fmt.Sprintf("cannot find virtual host for %s", ip.String()))
+	if virtual == nil || virtual.State != StateVirtualHost {
+		err = fmt.Errorf("cannot find virtual host for %s", ip.String())
 		log.Error("ARP error virtual host", err)
 		return err
 	}
@@ -61,12 +62,12 @@ func (c *ARPHandler) spoof(client *ARPEntry) error {
 
 const retryPeriod = time.Minute * 1
 
-func (c *ARPHandler) spoofLoop(client *ARPEntry) {
+func (c *Handler) spoofLoop(client *Entry) {
 	defer log.Warn("ARP spoof loop terminated")
 
 	// tryagain := time.Now().Add(retryPeriod)
 	for {
-		if client.State != ARPStateHunt {
+		if client.State != StateHunt {
 			return
 		}
 
@@ -92,17 +93,17 @@ func (c *ARPHandler) spoofLoop(client *ARPEntry) {
 //  4. set a callback when we receive a request from this client
 //
 // client will revert back to "normal" when a new IP is detected for the MAC
-func (c *ARPHandler) ForceIPChange(clientHwAddr net.HardwareAddr, clientIP net.IP) error {
+func (c *Handler) ForceIPChange(clientHwAddr net.HardwareAddr, clientIP net.IP) error {
 	log.WithFields(log.Fields{"clientmac": clientHwAddr.String(), "clientip": clientIP.String()}).Warn("ARP capture force IP change")
 
-	client := c.FindMAC(clientHwAddr.String())
+	client := c.FindMAC(clientHwAddr)
 	if client == nil {
 		err := errors.New(fmt.Sprintf("mac %s is not online", clientHwAddr.String()))
 		log.Warn("ARP nothing to do - ", err)
 		return err
 	}
 
-	if client.State == ARPStateHunt {
+	if client.State == StateHunt {
 		err := errors.New(fmt.Sprintf("client already in hunt state %s ", client.IP.String()))
 		log.Error("ARP error in ForceIPChange", err)
 		return err
@@ -115,13 +116,13 @@ func (c *ARPHandler) ForceIPChange(clientHwAddr net.HardwareAddr, clientIP net.I
 	}
 
 	// Create a virtual host to handle this IP
-	c.arpTableAppend(ARPStateVirtualHost, ARPNewVirtualMAC(), clientIP)
+	c.arpTableAppend(StateVirtualHost, newVirtualHardwareAddr(), clientIP)
 
 	// Set client state to hunt and reset IP address
 	c.mutex.Lock()
 	client.PreviousIP = net.ParseIP(client.IP.String()).To4()
 	client.IP = net.IPv4zero
-	client.State = ARPStateHunt
+	client.State = StateHunt
 	c.mutex.Unlock()
 
 	go func() {
@@ -136,16 +137,16 @@ func (c *ARPHandler) ForceIPChange(clientHwAddr net.HardwareAddr, clientIP net.I
 	return nil
 }
 
-func (c *ARPHandler) StopIPChange(clientHwAddr net.HardwareAddr) {
+func (c *Handler) StopIPChange(clientHwAddr net.HardwareAddr) {
 	log.WithFields(log.Fields{"clientmac": clientHwAddr.String()}).Info("ARP stop IP change")
 
-	client := c.FindMAC(clientHwAddr.String())
+	client := c.FindMAC(clientHwAddr)
 	if client == nil {
 		log.WithFields(log.Fields{"clientmac": clientHwAddr}).Error("ARP mac not found")
 		return
 	}
 
-	if client.State == ARPStateHunt {
+	if client.State == StateHunt {
 		c.actionStopHunt(client)
 	}
 }
@@ -153,7 +154,7 @@ func (c *ARPHandler) StopIPChange(clientHwAddr net.HardwareAddr) {
 // ARPFakeConflict tricks clients to send a new DHCP request to capture the name.
 // It is used to get the initial client name.
 //
-func (c *ARPHandler) ARPFakeIPConflict(clientHwAddr net.HardwareAddr, clientIP net.IP) {
+func (c *Handler) ARPFakeIPConflict(clientHwAddr net.HardwareAddr, clientIP net.IP) {
 	log.WithFields(log.Fields{"clientmac": clientHwAddr.String(), "clientip": clientIP.String()}).Warn("ARP fake IP conflict")
 
 	go func() {
@@ -169,23 +170,23 @@ func (c *ARPHandler) ARPFakeIPConflict(clientHwAddr net.HardwareAddr, clientIP n
 	}()
 }
 
-func (c *ARPHandler) actionStopHunt(client *ARPEntry) {
+func (c *Handler) actionStopHunt(client *Entry) {
 	log.WithFields(log.Fields{"clientmac": client.MAC.String(), "clientip": client.PreviousIP.String()}).Info("ARP hunt stop")
 
-	if client.State != ARPStateHunt {
+	if client.State != StateHunt {
 		log.WithFields(log.Fields{"clientmac": client.MAC.String(), "clientip": client.PreviousIP.String()}).Error("ARP client is not in hunt state")
 		return
 	}
 
 	c.deleteVirtualMAC(client.PreviousIP)
 	c.mutex.Lock()
-	client.State = ARPStateNormal
+	client.State = StateNormal
 	client.IP = client.PreviousIP
 	client.PreviousIP = net.IPv4zero
 	c.mutex.Unlock()
 }
 
-func (c *ARPHandler) actionRequestInHuntState(client *ARPEntry, senderIP net.IP, targetIP net.IP) (n int, err error) {
+func (c *Handler) actionRequestInHuntState(client *Entry, senderIP net.IP, targetIP net.IP) (n int, err error) {
 
 	// We are only interested in ARP Address Conflict Detection packets:
 	//
@@ -218,7 +219,7 @@ func (c *ARPHandler) actionRequestInHuntState(client *ARPEntry, senderIP net.IP,
 		log.WithFields(log.Fields{"clientmac": client.MAC.String(), "clientip": client.IP}).Infof("ARP request client changed IP to %s", targetIP)
 
 		c.mutex.Lock()
-		client.State = ARPStateNormal
+		client.State = StateNormal
 		c.mutex.Unlock()
 
 		n := c.actionUpdateClient(client, client.MAC, targetIP)
@@ -233,11 +234,11 @@ func (c *ARPHandler) actionRequestInHuntState(client *ARPEntry, senderIP net.IP,
 	return 0, err
 }
 
-func (c *ARPHandler) actionClaimIP(client *ARPEntry) (err error) {
+func (c *Handler) actionClaimIP(client *Entry) (err error) {
 
 	ip := client.IP
 	c.mutex.Lock()
-	if client.State == ARPStateHunt {
+	if client.State == StateHunt {
 		ip = client.PreviousIP
 	}
 	c.mutex.Unlock()
@@ -251,8 +252,8 @@ func (c *ARPHandler) actionClaimIP(client *ARPEntry) (err error) {
 	// Request ownership of the IP; this will force the client to acquire another IP
 	// Gratuitous Request will have IP = zero
 	virtual := c.FindIP(ip)
-	if virtual == nil || virtual.State != ARPStateVirtualHost {
-		err = errors.New(fmt.Sprintf("cannot find virtual host for %s", ip.String()))
+	if virtual == nil || virtual.State != StateVirtualHost {
+		err = fmt.Errorf("cannot find virtual host for %s", ip.String())
 		log.Error("ARP error virtual host", err)
 		return err
 	}

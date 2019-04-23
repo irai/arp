@@ -4,12 +4,13 @@ import (
 	"bufio"
 	"flag"
 	"fmt"
-	"github.com/irai/arp"
-	log "github.com/sirupsen/logrus"
 	"net"
 	"os"
 	"strings"
 	"time"
+
+	"github.com/irai/arp"
+	log "github.com/sirupsen/logrus"
 )
 
 var (
@@ -47,7 +48,7 @@ func main() {
 
 	go c.ListenAndServe(time.Second * 30 * 5)
 
-	arpChannel := make(chan arp.ARPEntry, 16)
+	arpChannel := make(chan arp.Entry, 16)
 	c.AddNotificationChannel(arpChannel)
 
 	go arpNotification(arpChannel)
@@ -58,7 +59,7 @@ func main() {
 
 }
 
-func arpNotification(arpChannel chan arp.ARPEntry) {
+func arpNotification(arpChannel chan arp.Entry) {
 	for {
 		select {
 		case entry := <-arpChannel:
@@ -68,7 +69,7 @@ func arpNotification(arpChannel chan arp.ARPEntry) {
 	}
 }
 
-func cmd(c *arp.ARPHandler) {
+func cmd(c *arp.Handler) {
 	reader := bufio.NewReader(os.Stdin)
 	for {
 		fmt.Println("Command: (q)uit | (l)ist | (f)force <mac> | (s) stop <mac> | (g) loG <level>")
@@ -112,7 +113,7 @@ func cmd(c *arp.ARPHandler) {
 	}
 }
 
-func getMAC(c *arp.ARPHandler, text string) *arp.ARPEntry {
+func getMAC(c *arp.Handler, text string) *arp.Entry {
 	if len(text) <= 3 {
 		log.Error("Invalid MAC")
 		return nil
@@ -122,7 +123,7 @@ func getMAC(c *arp.ARPHandler, text string) *arp.ARPEntry {
 		log.Error("invalid MAC ", err)
 		return nil
 	}
-	entry := c.FindMAC(mac.String())
+	entry := c.FindMAC(mac)
 	if entry == nil {
 		log.Error("Mac not found: ", mac)
 		return nil

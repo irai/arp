@@ -1,20 +1,35 @@
 package arp
 
 import (
-	marp "github.com/mdlayher/arp"
-	log "github.com/sirupsen/logrus"
 	"net"
 	"time"
+
+	marp "github.com/mdlayher/arp"
+	log "github.com/sirupsen/logrus"
 )
 
 var (
 	writeTimeout, _ = time.ParseDuration("100ms")
-	ScanTimeout, _  = time.ParseDuration("5s")
+	scanTimeout, _  = time.ParseDuration("5s")
 
+	// EthernetBroadcast defines the broadcast address
 	EthernetBroadcast = net.HardwareAddr{0xff, 0xff, 0xff, 0xff, 0xff, 0xff}
 )
 
-// request send ARP request from src to dst
+func (c *Handler) request(srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr net.HardwareAddr, dstIP net.IP) error {
+	arp, err := marp.NewPacket(marp.OperationRequest, srcHwAddr, srcIP, dstHwAddr, dstIP)
+	if err != nil {
+		return err
+	}
+
+	if err := c.client.SetWriteDeadline(time.Now().Add(writeTimeout)); err != nil {
+		log.Error(err)
+	}
+
+	return c.client.WriteTo(arp, EthernetBroadcast)
+}
+
+// Request send ARP request from src to dst
 // multiple goroutines can call request simultaneously.
 //
 // Request is almost always broadcast but unicast can be used to maintain ARP table;
@@ -32,20 +47,7 @@ var (
 // | ACD announ | 1 | broadcast | clientMAC | clientMAC  | clientIP   | ff:ff:ff:ff:ff:ff |  clientIP |
 // +============+===+===========+===========+============+============+===================+===========+
 //
-func (c *ARPHandler) request(srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr net.HardwareAddr, dstIP net.IP) error {
-	arp, err := marp.NewPacket(marp.OperationRequest, srcHwAddr, srcIP, dstHwAddr, dstIP)
-	if err != nil {
-		return err
-	}
-
-	if err := c.client.SetWriteDeadline(time.Now().Add(writeTimeout)); err != nil {
-		log.Error(err)
-	}
-
-	return c.client.WriteTo(arp, EthernetBroadcast)
-}
-
-func (c *ARPHandler) Request(srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr net.HardwareAddr, dstIP net.IP) error {
+func (c *Handler) Request(srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr net.HardwareAddr, dstIP net.IP) error {
 	if srcIP.Equal(dstIP) {
 		log.WithFields(log.Fields{"srcmac": srcHwAddr, "srcip": srcIP, "dstmac": dstHwAddr, "dstip": dstIP}).Infof("ARP send announcement - I am %s", dstIP)
 	} else {
@@ -57,12 +59,12 @@ func (c *ARPHandler) Request(srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr
 // Reply send ARP reply from the src to the dst
 //
 // Call with dstHwAddr = ethernet.Broadcast to reply to all
-func (c *ARPHandler) Reply(srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr net.HardwareAddr, dstIP net.IP) error {
+func (c *Handler) Reply(srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr net.HardwareAddr, dstIP net.IP) error {
 	log.WithFields(log.Fields{"dstmac": dstHwAddr.String(), "dstip": dstIP.String()}).Warnf("ARP send reply - host %s is at %s", srcIP.String(), srcHwAddr.String())
 	return c.reply(srcHwAddr, srcIP, dstHwAddr, dstIP)
 }
 
-func (c *ARPHandler) reply(srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr net.HardwareAddr, dstIP net.IP) error {
+func (c *Handler) reply(srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr net.HardwareAddr, dstIP net.IP) error {
 	p, err := marp.NewPacket(marp.OperationReply, srcHwAddr, srcIP, dstHwAddr, dstIP)
 	if err != nil {
 		return err
@@ -75,6 +77,8 @@ func (c *ARPHandler) reply(srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr n
 	return c.client.WriteTo(p, dstHwAddr)
 }
 
+// Probe will send an arp request broadcast on the local link.
+//
 // The term 'ARP Probe' is used to refer to an ARP Request packet, broadcast on the local link,
 // with an all-zero 'sender IP address'. The 'sender hardware address' MUST contain the hardware address of the
 // interface sending the packet. The 'sender IP address' field MUST be set to all zeroes,
@@ -82,12 +86,12 @@ func (c *ARPHandler) reply(srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr n
 // to be already in use by another host. The 'target IP address' field MUST be set to the address being probed.
 // An ARP Probe conveys both a question ("Is anyone using this address?") and an
 // implied statement ("This is the address I hope to use.").
-func (c *ARPHandler) Probe(ip net.IP) error {
+func (c *Handler) Probe(ip net.IP) error {
 	return c.Request(c.config.HostMAC, net.IPv4zero, EthernetBroadcast, ip)
 }
 
 // probeUnicast is used to validate the client is still online; same as ARP probe but unicast to target
-func (c *ARPHandler) probeUnicast(mac net.HardwareAddr, ip net.IP) error {
+func (c *Handler) probeUnicast(mac net.HardwareAddr, ip net.IP) error {
 	return c.Request(c.config.HostMAC, net.IPv4zero, mac, ip)
 }
 
@@ -103,11 +107,11 @@ func (c *ARPHandler) probeUnicast(mac net.HardwareAddr, ip net.IP) error {
 // previously have been using the same address.  The host may begin
 // legitimately using the IP address immediately after sending the first
 // of the two ARP Announcements;
-func (c *ARPHandler) announce(mac net.HardwareAddr, ip net.IP) error {
+func (c *Handler) announce(mac net.HardwareAddr, ip net.IP) error {
 	return c.announceUnicast(mac, ip, EthernetBroadcast)
 }
 
-func (c *ARPHandler) announceUnicast(mac net.HardwareAddr, ip net.IP, targetMac net.HardwareAddr) (err error) {
+func (c *Handler) announceUnicast(mac net.HardwareAddr, ip net.IP, targetMac net.HardwareAddr) (err error) {
 	err = c.Request(mac, ip, targetMac, ip)
 	go func() {
 		time.Sleep(time.Second * 1)
@@ -117,9 +121,9 @@ func (c *ARPHandler) announceUnicast(mac net.HardwareAddr, ip net.IP, targetMac 
 	return err
 }
 
-// WhoIs Get MAC address for IP: try 3 times
+// WhoIs will send a request packet to get the MAC address for the IP. Retry 3 times.
 //
-func (c *ARPHandler) WhoIs(ip net.IP) (entry *ARPEntry, err error) {
+func (c *Handler) WhoIs(ip net.IP) (entry *Entry, err error) {
 	// test first before sending request; useful for testing
 	if entry = c.FindIP(ip); entry != nil {
 		return entry, nil

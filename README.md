@@ -55,14 +55,14 @@ listen for ARP changes and generate a notification each time a mac changes betwe
 
 Listen to changes to mac table
 ```golang
-    arpChannel := make(chan arp.ARPEntry, 16)
+    arpChannel := make(chan arp.Entry, 16)
 	c.AddNotificationChannel(arpChannel)
 
 	go arpNotification(arpChannel)
 ```
 
 ```golang
-func arpNotification(arpChannel chan arp.ARPEntry) {
+func arpNotification(arpChannel chan arp.Entry) {
 	for {
 		select {
 		case entry := <-arpChannel:

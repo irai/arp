@@ -1,9 +1,10 @@
 package arp
 
 import (
-	log "github.com/sirupsen/logrus"
 	"net"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -15,10 +16,10 @@ const (
 // Probe known macs more often in case they left the network.
 //
 // checkNewDevicesInterval is the the duration between full scans
-//
-func (c *ARPHandler) pollingLoop(checkNewDevicesInterval time.Duration) (err error) {
+
+func (c *Handler) pollingLoop(checkNewDevicesInterval time.Duration) (err error) {
 	// Goroutine pool
-	h := c.workers.Begin("scanloop", false)
+	h := c.workers.Begin("scanloop")
 	defer h.End()
 
 	c.scanNetwork()
@@ -42,11 +43,9 @@ func (c *ARPHandler) pollingLoop(checkNewDevicesInterval time.Duration) (err err
 	}
 }
 
-func (c *ARPHandler) confirmIsActive() {
+func (c *Handler) confirmIsActive() {
 
-	c.mutex.Lock()
-	table := c.table[:]
-	c.mutex.Unlock()
+	table := c.table[:] // fix the table len
 
 	now := time.Now()
 	refreshDeadline := now.Add(confirmIsActiveFrequency * -1)                   // Refresh entries last updated before this time
@@ -57,8 +56,7 @@ func (c *ARPHandler) confirmIsActive() {
 	for i := range table {
 
 		// Ignore virtual entries - these are always online
-		if table[i].State == ARPStateVirtualHost ||
-			table[i].State == ARPStateDeleted {
+		if table[i] == nil || table[i].State == StateVirtualHost {
 			continue
 		}
 
@@ -67,7 +65,10 @@ func (c *ARPHandler) confirmIsActive() {
 			if table[i].Online == true {
 				log.Error("ARP device is not offline during delete")
 			}
-			c.delete(&table[i])
+			// c.delete(table[i])
+			log.WithFields(log.Fields{"clientmac": table[i].MAC, "clientip": table[i].IP}).
+				Infof("ARP delete entry online %5v state %10s", table[i].Online, table[i].State)
+			table[i] = nil
 			continue
 		}
 
@@ -82,7 +83,7 @@ func (c *ARPHandler) confirmIsActive() {
 
 		if table[i].LastUpdate.Before(refreshDeadline) {
 			switch table[i].State {
-			case ARPStateHunt:
+			case StateHunt:
 				ip = table[i].PreviousIP
 			default:
 				ip = table[i].IP
@@ -104,7 +105,7 @@ func (c *ARPHandler) confirmIsActive() {
 
 					// Notify upstream the device changed to offline
 					if c.notification != nil {
-						c.notification <- table[i]
+						c.notification <- *table[i]
 					}
 				}
 			}
@@ -112,7 +113,7 @@ func (c *ARPHandler) confirmIsActive() {
 	}
 }
 
-func (c *ARPHandler) scanNetwork() error {
+func (c *Handler) scanNetwork() error {
 
 	// Copy underneath array so we can modify value.
 	ip := net.ParseIP(c.config.HomeLAN.IP.String()).To4()

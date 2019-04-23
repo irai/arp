@@ -2,8 +2,9 @@ package arp
 
 import (
 	"errors"
-	log "github.com/sirupsen/logrus"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 )
 
 // GoroutinePool tracks background goroutines and enable termination.
@@ -25,7 +26,6 @@ import (
 //  }()
 //
 // workers.Stop()
-
 type GoroutinePool struct {
 	// goroutines should wait on StopChannel with "<- StopChannel"
 	StopChannel    chan struct{}
@@ -36,9 +36,8 @@ type GoroutinePool struct {
 }
 
 type goroutine struct {
-	name   string
-	server bool
-	pool   *GoroutinePool
+	name string
+	pool *GoroutinePool
 }
 
 func (h *GoroutinePool) Init(name string) {
@@ -51,18 +50,18 @@ func (h *GoroutinePool) Init(name string) {
 // Begin records the begining of a new goroutine in the pool.
 // name is the name printed on exit
 // server - set to true if this is a background goroutine that should never end
-func (h *GoroutinePool) Begin(name string, server bool) *goroutine {
-	g := goroutine{name: name, server: server, pool: h}
+func (h *GoroutinePool) Begin(name string) *goroutine {
+	g := goroutine{name: name, pool: h}
 	h.n++
 	log.Infof("%s %s goroutine started", g.pool.name, g.name)
 	return &g
 }
 
 func (g *goroutine) End() {
-	if g.pool.Stopping || g.server == false {
+	if g.pool.Stopping {
 		log.Infof("%s %s goroutine completed", g.pool.name, g.name)
 	} else {
-		log.Fatalf("%s %s goroutine terminated unexpectedly ", g.pool.name, g.name)
+		log.Errorf("%s %s goroutine terminated unexpectedly ", g.pool.name, g.name)
 	}
 	g.pool.stoppedChannel <- g
 }
