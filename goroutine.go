@@ -60,8 +60,6 @@ func (h *GoroutinePool) Begin(name string) *goroutine {
 func (g *goroutine) End() {
 	if g.pool.Stopping {
 		log.Infof("%s %s goroutine completed", g.pool.name, g.name)
-	} else {
-		log.Errorf("%s %s goroutine terminated unexpectedly ", g.pool.name, g.name)
 	}
 	g.pool.stoppedChannel <- g
 }
