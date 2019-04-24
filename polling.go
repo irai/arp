@@ -16,7 +16,6 @@ const (
 // Probe known macs more often in case they left the network.
 //
 // checkNewDevicesInterval is the the duration between full scans
-
 func (c *Handler) pollingLoop(checkNewDevicesInterval time.Duration) (err error) {
 	// Goroutine pool
 	h := c.workers.Begin("scanloop")

@@ -40,11 +40,16 @@ type goroutine struct {
 	pool *GoroutinePool
 }
 
-func (h *GoroutinePool) Init(name string) {
-	h.name = name
-	h.Stopping = false
-	h.StopChannel = make(chan struct{})
-	h.stoppedChannel = make(chan *goroutine)
+var goroutinepool *GoroutinePool
+
+// New create a new go routine pool
+func (h *GoroutinePool) New(name string) (ret *GoroutinePool) {
+	ret = &GoroutinePool{}
+	ret.name = name
+	ret.Stopping = false
+	ret.StopChannel = make(chan struct{})
+	ret.stoppedChannel = make(chan *goroutine)
+	return ret
 }
 
 // Begin records the begining of a new goroutine in the pool.
@@ -64,6 +69,7 @@ func (g *goroutine) End() {
 	g.pool.stoppedChannel <- g
 }
 
+// Stop send a channel msg to stop running goroutines
 func (h *GoroutinePool) Stop() error {
 	// closing stopChannel will cause all waiting goroutines to exit
 	h.Stopping = true

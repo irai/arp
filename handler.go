@@ -26,7 +26,7 @@ type Handler struct {
 	notification chan<- Entry // notification channel for state change
 	// tranChannel  chan<- Entry // notification channel for arp hunt ent
 	config  configuration
-	workers GoroutinePool
+	workers *GoroutinePool
 }
 
 var (
@@ -65,7 +65,7 @@ func NewHandler(nic string, hostMAC net.HardwareAddr, hostIP net.IP, routerIP ne
 	c.config.RouterIP = routerIP
 	c.config.HomeLAN = homeLAN
 
-	c.workers.Init("ARP")
+	c.workers = goroutinepool.New("ARP")
 
 	log.WithFields(log.Fields{"hostinterface": c.config.NIC, "hostmac": c.config.HostMAC.String(),
 		"hostip": c.config.HostIP.String(), "lanrouter": c.config.RouterIP.String()}).Info("ARP configuration")
