@@ -14,7 +14,6 @@ import (
 type Entry struct {
 	MAC        net.HardwareAddr
 	IP         net.IP
-	// PreviousIP net.IP
 	State      arpState
 	LastUpdate time.Time
 	Online     bool
