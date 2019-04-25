@@ -4,6 +4,7 @@ import (
 	"net"
 	"sync"
 	"time"
+	"bytes"
 
 	marp "github.com/mdlayher/arp"
 	log "github.com/sirupsen/logrus"
@@ -93,23 +94,18 @@ func (c *Handler) Stop() error {
 }
 
 func (c *Handler) actionUpdateClient(client *Entry, senderMAC net.HardwareAddr, senderIP net.IP) int {
-	// client.LastUpdate = time.Now()
-
 	// Update IP if client changed
 	// Ignore router updates: our router broadcast 169.254.x.x local link IP.
 	//
 	if !client.IP.Equal(senderIP) && !senderIP.Equal(net.IPv4zero) &&
-		senderMAC.String() != c.config.RouterMAC.String() &&
+		!bytes.Equal(senderMAC, c.config.RouterMAC) &&
 		!senderIP.Equal(c.config.HostIP) &&
 		!cidr_169_254.Contains(senderIP) {
 		log.WithFields(log.Fields{"clientmac": client.MAC.String(), "clientip": client.IP.String()}).Infof("ARP client changed IP to %s", senderIP.String())
 		c.mutex.Lock()
-		virtual := client.PreviousIP
-		client.PreviousIP = client.IP
-		client.IP = net.ParseIP(senderIP.String()).To4()
+		client.IP = dupIP(senderIP)
 		client.State = StateNormal
 		c.mutex.Unlock()
-		c.deleteVirtualMAC(virtual)
 
 		return 1
 	}
@@ -177,16 +173,8 @@ func (c *Handler) ListenAndServe(scanInterval time.Duration) {
 	h := c.workers.Begin("listenandserve")
 	defer h.End()
 
-	// Goroutine to continualsy scan for network devices
-	go func() {
-		h := c.workers.Begin("polling_loop")
-		defer h.End()
-
-		if scanInterval != time.Duration(0) {
-			time.Sleep(time.Second * 1)
-			c.pollingLoop(scanInterval)
-		}
-	}()
+	// Goroutine to continuosly scan for network devices
+	go c.pollingLoop(scanInterval)
 
 	// Set ZERO timeout to block forever
 	if err := c.client.SetReadDeadline(time.Time{}); err != nil {
@@ -196,8 +184,10 @@ func (c *Handler) ListenAndServe(scanInterval time.Duration) {
 
 	// Loop and wait for ARP packets
 	for {
-
 		packet, _, err := c.client.Read()
+		if h.Stopping() { // are we stopping all goroutines?
+			return
+		}
 		if err != nil {
 			log.Error("ARP read error ", err)
 			if err1, ok := err.(net.Error); ok && err1.Temporary() {
@@ -218,19 +208,17 @@ func (c *Handler) ListenAndServe(scanInterval time.Duration) {
 			notify++
 		}
 
+		// Skip packets that we sent as virtual host (i.e. we sent these)
+		if sender.State == StateVirtualHost {
+			continue
+		}
+
 		if sender.Online == false {
 			sender.Online = true
 			notify++
 			log.WithFields(log.Fields{"clientmac": sender.MAC, "clientip": sender.IP}).Warn("ARP device is online")
 		}
 		sender.LastUpdate = time.Now()
-
-		// log.Debugf("ARP loop received packet type %v - mac %s", packet.Operation, sender.MAC.String())
-
-		// Skip packets that we sent as virtual host (i.e. we sent these)
-		if sender.State == StateVirtualHost {
-			continue
-		}
 
 		switch packet.Operation {
 
@@ -248,7 +236,7 @@ func (c *Handler) ListenAndServe(scanInterval time.Duration) {
 			target := c.FindIP(packet.TargetIP)
 			if target != nil && target.State == StateVirtualHost {
 				log.WithFields(log.Fields{"ip": target.IP, "mac": target.MAC}).Info("ARP sending reply for virtual mac")
-				c.Reply(target.MAC, target.IP, EthernetBroadcast, target.IP)
+				c.reply(target.MAC, target.IP, EthernetBroadcast, target.IP)
 				break // break the switch
 			}
 
@@ -268,9 +256,6 @@ func (c *Handler) ListenAndServe(scanInterval time.Duration) {
 			case StateNormal:
 				notify += c.actionUpdateClient(sender, packet.SenderHardwareAddr, packet.SenderIP)
 
-			// case StateVirtualHost:
-			// arpReplyVirtualMAC(packet.SenderHardwareAddr, packet.SenderIP, packet.TargetHardwareAddr, packet.TargetIP)
-
 			default:
 				log.Error("ARP unexpected client state in request =", sender.State)
 			}
@@ -288,14 +273,9 @@ func (c *Handler) ListenAndServe(scanInterval time.Duration) {
 			case StateHunt:
 				// Android does not send collision detection request,
 				// we will see a reply instead. Check if the address has changed.
-				if !packet.SenderIP.Equal(net.IPv4zero) && !packet.SenderIP.Equal(sender.PreviousIP) {
+				if !packet.SenderIP.Equal(net.IPv4zero) && !packet.SenderIP.Equal(sender.IP) {
 					notify += c.actionUpdateClient(sender, packet.SenderHardwareAddr, packet.SenderIP)
-				} else {
-
-					// c.actionClaimIP(sender)
-				}
-
-			case StateVirtualHost: // Captured our own reply - Do nothing
+				} 
 
 			default:
 				log.WithFields(log.Fields{"clientip": sender.IP, "clientmac": sender.MAC}).Error("ARP unexpected client state in reply =", sender.State)

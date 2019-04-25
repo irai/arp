@@ -90,3 +90,8 @@ func (h *GoroutinePool) Stop() error {
 		}
 	}
 }
+
+// Stopping is true if the pool is attempting to stop all goroutines.
+func (g *goroutine) Stopping() bool {
+	return g.pool.Stopping
+}

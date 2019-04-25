@@ -14,7 +14,7 @@ import (
 type Entry struct {
 	MAC        net.HardwareAddr
 	IP         net.IP
-	PreviousIP net.IP
+	// PreviousIP net.IP
 	State      arpState
 	LastUpdate time.Time
 	Online     bool
@@ -39,7 +39,7 @@ func (c *Handler) PrintTable() {
 	for _, v := range c.table {
 		if v != nil {
 			log.WithFields(log.Fields{"clientmac": v.MAC.String(), "clientip": v.IP.String()}).
-				Infof("ARP table %5v %10s %18s  %14s previous %14s", v.Online, v.State, v.MAC, v.IP, v.PreviousIP)
+				Infof("ARP table %5v %10s %18s  %14s", v.Online, v.State, v.MAC, v.IP)
 		}
 	}
 }
@@ -67,7 +67,9 @@ func (c *Handler) FindIP(ip net.IP) *Entry {
 	}
 
 	for i := range c.table {
-		if c.table[i] != nil && c.table[i].IP.Equal(ip) {
+		// When in Hunt state, the IP is claimed by a virtual host; ignore the entry
+		if c.table[i] != nil && 
+		   c.table[i].IP.Equal(ip) && c.table[i].State != StateHunt {
 			return c.table[i]
 		}
 	}
@@ -85,8 +87,8 @@ func (c *Handler) GetTable() (table []*Entry) {
 }
 
 func (c *Handler) arpTableAppend(state arpState, clientMAC net.HardwareAddr, clientIP net.IP) (ret *Entry) {
-	mac := DupMAC(clientMAC)    // copy the underlying slice
-	ip := DupIP(clientIP).To4() // copy the underlysing slice
+	mac := dupMAC(clientMAC)    // copy the underlying slice
+	ip := dupIP(clientIP).To4() // copy the underlysing slice
 
 	log.WithFields(log.Fields{"ip": ip.String(), "mac": mac.String()}).Warn("ARP new mac detected")
 

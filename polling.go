@@ -39,6 +39,10 @@ func (c *Handler) pollingLoop(checkNewDevicesInterval time.Duration) (err error)
 		case <-checkDeviceIsActive:
 			c.confirmIsActive()
 		}
+
+		if h.pool.Stopping {
+			return
+		}
 	}
 }
 
@@ -54,20 +58,29 @@ func (c *Handler) confirmIsActive() {
 	log.Info("ARP refresh online devices")
 	for i := range table {
 
-		// Ignore virtual entries - these are always online
-		if table[i] == nil || table[i].State == StateVirtualHost {
+		// Ignore empty entries
+		if table[i] == nil {
 			continue
 		}
 
 		// Delete from ARP table if the device was not seen for the last hour
 		if table[i].LastUpdate.Before(deleteDeadline) {
 			if table[i].Online == true {
-				log.Error("ARP device is not offline during delete")
+				log.Warn("ARP device is not offline during delete", table[i].MAC)
 			}
-			// c.delete(table[i])
 			log.WithFields(log.Fields{"clientmac": table[i].MAC, "clientip": table[i].IP}).
 				Infof("ARP delete entry online %5v state %10s", table[i].Online, table[i].State)
+
+			// if in Hunt mode, delete virtual entry too.
+			if table[i].State == StateHunt {
+				c.deleteVirtualMAC(table[i].IP)
+	}
 			table[i] = nil
+			continue
+		}
+
+		// Ignore virtual entries - these are always online until deletion
+		if table[i].State == StateVirtualHost {
 			continue
 		}
 
@@ -75,21 +88,9 @@ func (c *Handler) confirmIsActive() {
 		//   1) device is online and have not received an update recently; or
 		//   2) device is offline and no more than one hour has passed.
 		//
-		// if (table[i].Online == true && table[i].LastUpdate.Before(refreshDeadline)) ||
-		// (table[i].Online == false && table[i].LastUpdate.After(deleteDeadline)) {
-
-		var ip net.IP
-
 		if table[i].LastUpdate.Before(refreshDeadline) {
-			switch table[i].State {
-			case StateHunt:
-				ip = table[i].PreviousIP
-			default:
-				ip = table[i].IP
-			}
-
-			if err := c.Request(c.config.HostMAC, c.config.HostIP, table[i].MAC, ip); err != nil {
-				log.WithFields(log.Fields{"clientmac": table[i].MAC, "clientip": ip}).Error("Error ARP request: ", err)
+			if err := c.Request(c.config.HostMAC, c.config.HostIP, table[i].MAC, table[i].IP); err != nil {
+				log.WithFields(log.Fields{"clientmac": table[i].MAC, "clientip": table[i].IP}).Error("Error ARP request: ", err)
 			}
 
 			// Give it a chance to update
