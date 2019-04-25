@@ -18,7 +18,7 @@ const (
 // checkNewDevicesInterval is the the duration between full scans
 func (c *Handler) pollingLoop(checkNewDevicesInterval time.Duration) (err error) {
 	// Goroutine pool
-	h := c.workers.Begin("scanloop")
+	h := c.workers.Begin("pollingLoop")
 	defer h.End()
 
 	c.scanNetwork()
@@ -33,7 +33,6 @@ func (c *Handler) pollingLoop(checkNewDevicesInterval time.Duration) (err error)
 			c.scanNetwork()
 
 		case <-c.workers.StopChannel:
-			log.Info("ARP stopping probeLoop")
 			return nil
 
 		case <-checkDeviceIsActive:
@@ -44,7 +43,9 @@ func (c *Handler) pollingLoop(checkNewDevicesInterval time.Duration) (err error)
 
 func (c *Handler) confirmIsActive() {
 
+	c.mutex.Lock()
 	table := c.table[:] // fix the table len
+	c.mutex.Unlock()
 
 	now := time.Now()
 	refreshDeadline := now.Add(confirmIsActiveFrequency * -1)                   // Refresh entries last updated before this time
@@ -54,8 +55,8 @@ func (c *Handler) confirmIsActive() {
 	log.Info("ARP refresh online devices")
 	for i := range table {
 
-		// Ignore empty entries and virtual entries - these are always online until deletion
-		if table[i] == nil || table[i].State == StateVirtualHost {
+		// Ignore empty entries
+		if table[i] == nil {
 			continue
 		}
 
@@ -75,12 +76,17 @@ func (c *Handler) confirmIsActive() {
 			continue
 		}
 
+		// Don't probe virtual entries - these are always online until deletion
+		if table[i].State == StateVirtualHost {
+			continue
+		}
+
 		// probe only in these two cases:
 		//   1) device is online and have not received an update recently; or
 		//   2) device is offline and no more than one hour has passed.
 		//
 		if table[i].LastUpdate.Before(refreshDeadline) {
-			if err := c.Request(c.config.HostMAC, c.config.HostIP, table[i].MAC, table[i].IP); err != nil {
+			if err := c.request(c.config.HostMAC, c.config.HostIP, table[i].MAC, table[i].IP); err != nil {
 				log.WithFields(log.Fields{"clientmac": table[i].MAC, "clientip": table[i].IP}).Error("Error ARP request: ", err)
 			}
 

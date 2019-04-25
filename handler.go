@@ -1,10 +1,10 @@
 package arp
 
 import (
+	"bytes"
 	"net"
 	"sync"
 	"time"
-	"bytes"
 
 	marp "github.com/mdlayher/arp"
 	log "github.com/sirupsen/logrus"
@@ -101,11 +101,13 @@ func (c *Handler) actionUpdateClient(client *Entry, senderMAC net.HardwareAddr, 
 		!bytes.Equal(senderMAC, c.config.RouterMAC) &&
 		!senderIP.Equal(c.config.HostIP) &&
 		!cidr_169_254.Contains(senderIP) {
-		log.WithFields(log.Fields{"clientmac": client.MAC.String(), "clientip": client.IP.String()}).Infof("ARP client changed IP to %s", senderIP.String())
+
 		c.mutex.Lock()
 		client.IP = dupIP(senderIP)
 		client.State = StateNormal
 		c.mutex.Unlock()
+
+		log.WithFields(log.Fields{"clientmac": client.MAC.String(), "clientip": client.IP.String()}).Infof("ARP client changed IP to %s", senderIP)
 
 		return 1
 	}
@@ -229,11 +231,14 @@ func (c *Handler) ListenAndServe(scanInterval time.Duration) {
 				log.WithFields(log.Fields{"clientmac": sender.MAC, "clientip": packet.SenderIP}).Info("ARP announcement received")
 			} else {
 				log.WithFields(log.Fields{"clientip": sender.IP, "clientmac": sender.MAC,
-					"to_ip": packet.TargetIP.String(), "to_mac": packet.TargetHardwareAddr}).Debugf("ARP request received - who is %s tell %s", packet.TargetIP.String(), sender.IP.String())
+					"to_ip": packet.TargetIP.String(), "to_mac": packet.TargetHardwareAddr}).Debugf("ARP request received - who is %s tell %s", packet.TargetIP.String(), sender.IP)
 			}
 
 			// if target is virtual host, reply and return
 			target := c.FindIP(packet.TargetIP)
+			if target != nil {
+				log.WithFields(log.Fields{"ip": target.IP, "mac": target.MAC}).Info("ARP found target", *target)
+			}
 			if target != nil && target.State == StateVirtualHost {
 				log.WithFields(log.Fields{"ip": target.IP, "mac": target.MAC}).Info("ARP sending reply for virtual mac")
 				c.reply(target.MAC, target.IP, EthernetBroadcast, target.IP)
@@ -243,6 +248,7 @@ func (c *Handler) ListenAndServe(scanInterval time.Duration) {
 			// IF ACD probe; do nothing as the sender IP is not valid yet.
 			//
 			if packet.SenderIP.Equal(net.IPv4zero) {
+				c.PrintTable()
 				log.WithFields(log.Fields{"clientmac": sender.MAC, "clientip": packet.SenderIP, "targetip": packet.TargetIP}).
 					Info("ARP acd probe received")
 				continue // continue the for loop
@@ -275,7 +281,7 @@ func (c *Handler) ListenAndServe(scanInterval time.Duration) {
 				// we will see a reply instead. Check if the address has changed.
 				if !packet.SenderIP.Equal(net.IPv4zero) && !packet.SenderIP.Equal(sender.IP) {
 					notify += c.actionUpdateClient(sender, packet.SenderHardwareAddr, packet.SenderIP)
-				} 
+				}
 
 			default:
 				log.WithFields(log.Fields{"clientip": sender.IP, "clientmac": sender.MAC}).Error("ARP unexpected client state in reply =", sender.State)

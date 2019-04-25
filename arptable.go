@@ -67,8 +67,8 @@ func (c *Handler) FindIP(ip net.IP) *Entry {
 
 	for i := range c.table {
 		// When in Hunt state, the IP is claimed by a virtual host; ignore the entry
-		if c.table[i] != nil && 
-		   c.table[i].IP.Equal(ip) && c.table[i].State != StateHunt {
+		if c.table[i] != nil &&
+			c.table[i].IP.Equal(ip) && c.table[i].State != StateHunt {
 			return c.table[i]
 		}
 	}
@@ -86,48 +86,43 @@ func (c *Handler) GetTable() (table []*Entry) {
 }
 
 func (c *Handler) arpTableAppend(state arpState, clientMAC net.HardwareAddr, clientIP net.IP) (ret *Entry) {
-	mac := dupMAC(clientMAC)    // copy the underlying slice
-	ip := dupIP(clientIP).To4() // copy the underlysing slice
+	mac := dupMAC(clientMAC) // copy the underlying slice
+	ip := dupIP(clientIP)    // copy the underlysing slice
 
 	log.WithFields(log.Fields{"ip": ip.String(), "mac": mac.String()}).Warn("ARP new mac detected")
 
+	entry := &Entry{State: state, MAC: mac, IP: ip.To4(), LastUpdate: time.Now(), Online: true}
+
 	c.mutex.Lock()
+	defer c.mutex.Unlock()
 
 	// Attempt to reuse deleted entry if available
 	for i := range c.table {
 		if c.table[i] == nil {
-			c.table[i] = &Entry{}
-			c.table[i].State = state
-			c.table[i].MAC = mac
-			c.table[i].IP = ip
-			c.table[i].LastUpdate = time.Now()
-			c.table[i].Online = true
-			ret = c.table[i]
-			break
+			c.table[i] = entry
+			return entry
 		}
 	}
 
 	// Extend table when deleted entries are not available
-	if ret == nil {
-		entry := &Entry{State: state, MAC: mac, IP: ip.To4(), LastUpdate: time.Now(), Online: true}
-		c.table = append(c.table, entry)
-		ret = c.table[len(c.table)-1]
-	}
-
-	c.mutex.Unlock()
+	c.table = append(c.table, entry)
 
 	// c.PrintTable()
-	return ret
+	return entry
 }
 
 func (c *Handler) deleteVirtualMAC(ip net.IP) {
 	c.mutex.Lock()
+	defer log.Error("RETURNING from deleteVirtualMAC", ip)
 	defer c.mutex.Unlock()
 
 	for i := range c.table {
 		if c.table[i] != nil && c.table[i].IP.Equal(ip) && c.table[i].State == StateVirtualHost {
 
-			c.table[i] = nil
+			// c.table[i] = nil
+			// soft delete; will be deleted when no longer in use
+			c.table[i].LastUpdate = time.Now()
+			c.PrintTable()
 
 			return
 		}
