@@ -246,3 +246,4 @@ func (c *Handler) forceAnnouncement(client *Entry) error {
 
 	return nil
 }
+

@@ -39,10 +39,6 @@ func (c *Handler) pollingLoop(checkNewDevicesInterval time.Duration) (err error)
 		case <-checkDeviceIsActive:
 			c.confirmIsActive()
 		}
-
-		if h.pool.Stopping {
-			return
-		}
 	}
 }
 
@@ -58,8 +54,8 @@ func (c *Handler) confirmIsActive() {
 	log.Info("ARP refresh online devices")
 	for i := range table {
 
-		// Ignore empty entries
-		if table[i] == nil {
+		// Ignore empty entries and virtual entries - these are always online until deletion
+		if table[i] == nil || table[i].State == StateVirtualHost {
 			continue
 		}
 
@@ -74,13 +70,8 @@ func (c *Handler) confirmIsActive() {
 			// if in Hunt mode, delete virtual entry too.
 			if table[i].State == StateHunt {
 				c.deleteVirtualMAC(table[i].IP)
-	}
+			}
 			table[i] = nil
-			continue
-		}
-
-		// Ignore virtual entries - these are always online until deletion
-		if table[i].State == StateVirtualHost {
 			continue
 		}
 
@@ -116,7 +107,7 @@ func (c *Handler) confirmIsActive() {
 func (c *Handler) scanNetwork() error {
 
 	// Copy underneath array so we can modify value.
-	ip := net.ParseIP(c.config.HomeLAN.IP.String()).To4()
+	ip := dupIP(c.config.HomeLAN.IP)
 
 	log.Info("ARP Discovering IP - sending 254 ARP requests")
 	for host := 1; host < 255; host++ {
