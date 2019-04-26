@@ -97,15 +97,23 @@ func (c *Handler) arpTableAppend(state arpState, clientMAC net.HardwareAddr, cli
 	defer c.mutex.Unlock()
 
 	// Attempt to reuse deleted entry if available
-	for i := range c.table {
-		if c.table[i] == nil {
-			c.table[i] = entry
+	table := c.table // to be safe,  don't want c.table to change on us 
+	for i := range table {
+		if table[i] == nil {
+			table[i] = entry
 			return entry
 		}
 	}
 
-	// Extend table when deleted entries are not available
-	c.table = append(c.table, entry)
+	// Don't extend table when past the maximum capacity. The initial table
+	// should have plenty of capacity to store all IPs (ie. 256 capacity)
+	// This will cause a buffer rellocation and likely result in pointer errors in 
+	// other goroutines.
+	if len(c.table) >= cap(c.table) {
+		log.Error("arptable is too big", len(c.table), cap(c.table))
+		return nil
+	}
+	_ = append(c.table, entry)
 
 	// c.PrintTable()
 	return entry

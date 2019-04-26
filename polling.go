@@ -72,7 +72,9 @@ func (c *Handler) confirmIsActive() {
 			if table[i].State == StateHunt {
 				c.deleteVirtualMAC(table[i].IP)
 			}
+			c.mutex.Lock()
 			table[i] = nil
+			c.mutex.Unlock()
 			continue
 		}
 

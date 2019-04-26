@@ -55,7 +55,7 @@ func (c *Handler) ForceIPChange(clientHwAddr net.HardwareAddr, clientIP net.IP) 
 	client.State = StateHunt
 	// client.IP = nextFakeIP()
 
-	// spoof client until hunt ends
+	// spoof client until end of hunt phase 
 	go c.spoofLoop(client)
 
 	return nil

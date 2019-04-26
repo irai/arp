@@ -59,7 +59,9 @@ func NewHandler(nic string, hostMAC net.HardwareAddr, hostIP net.IP, routerIP ne
 		return nil, err
 	}
 
-	c.table = make([]*Entry, 0, 64)
+	// Set the table capacity to 256. This is the maximum number of entries 
+	// in current implementation (i.e. the logic assume IPv4/24).
+	c.table = make([]*Entry, 0, 256)
 	c.config.NIC = nic
 	c.config.HostMAC = hostMAC
 	c.config.HostIP = hostIP
