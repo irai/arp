@@ -2,6 +2,7 @@ package arp
 
 import (
 	"bytes"
+	"fmt"
 	"net"
 	"sync"
 	"time"
@@ -119,42 +120,43 @@ func (c *Handler) actionUpdateClient(client *Entry, senderMAC net.HardwareAddr, 
 	return 0
 }
 
-// IPChanged is used to notify that the IP has changed.
+// actionRequestInHuntState respond to a request from a device that is in Hunt state.
 //
-// The package will detect IP changes automatically however some clients do not
-// send ARP Collision Detection packets and hence do not appear as an immediate change.
-// This method is used to accelerate the change for example when a
-// new DHCP entry has been allocated.
-//
-func (c *Handler) IPChanged(clientHwAddr net.HardwareAddr, clientIP net.IP) {
-	client := c.FindMAC(clientHwAddr)
+func (c *Handler) actionRequestInHuntState(client *Entry, senderIP net.IP, targetIP net.IP) (n int, err error) {
 
-	// Do nothing if we already have this mac and ip
-	if client != nil && client.IP.Equal(clientIP) {
-		return
+	ip := client.IP // Keep a copy : client.IP may change
+
+	// We are only interested in ARP Address Conflict Detection packets:
+	//
+	// +============+===+===========+===========+============+============+===================+===========+
+	// | Type       | op| dstMAC    | srcMAC    | SenderMAC  | SenderIP   | TargetMAC         |  TargetIP |
+	// +============+===+===========+===========+============+============+===================+===========+
+	// | ACD probe  | 1 | broadcast | clientMAC | clientMAC  | 0x00       | 0x00              |  targetIP |
+	// | ACD announ | 1 | broadcast | clientMAC | clientMAC  | clientIP   | ff:ff:ff:ff:ff:ff |  clientIP |
+	// +============+===+===========+===========+============+============+===================+===========+
+	if !senderIP.Equal(net.IPv4zero) && !senderIP.Equal(targetIP) {
+		return 0, nil
 	}
 
-	log.WithFields(log.Fields{"clientmac": clientHwAddr, "clientip": clientIP}).Info("ARP new mac or ip - validating")
-	if err := c.Request(c.config.HostMAC, c.config.HostIP, EthernetBroadcast, clientIP); err != nil {
-		log.WithFields(log.Fields{"clientmac": clientHwAddr, "clientip": clientIP}).Error("ARP request failed", err)
-	}
+	log.WithFields(log.Fields{"clientmac": client.MAC, "clientip": ip}).Debugf("ARP client announcement in hunt state %s", targetIP)
 
-	go func() {
-		for i := 0; i < 5; i++ {
-			time.Sleep(time.Second * 2)
-			if entry := c.FindMAC(clientHwAddr); entry != nil && entry.IP.Equal(clientIP) {
-				log.WithFields(log.Fields{"clientmac": clientHwAddr, "clientip": clientIP}).Info("ARP found mac")
-				return
-			}
-
-			// Silent request
-			if err := c.request(c.config.HostMAC, c.config.HostIP, EthernetBroadcast, clientIP); err != nil {
-				log.WithFields(log.Fields{"clientmac": clientHwAddr, "clientip": clientIP}).Error("ARP request 2 failed", err)
-			}
+	// Record new IP in ARP table if address has changed.
+	// Stop hunting it. The spoof function will detect the mac changed to normal
+	// and delete the virtual IP.
+	//
+	if !ip.Equal(targetIP) { // is this a new IP?
+		n := c.actionUpdateClient(client, client.MAC, targetIP)
+		if n != 1 {
+			log.WithFields(log.Fields{"clientmac": client.MAC.String(), "clientip": ip}).Warnf("ARP client failed to change IP to %s", targetIP)
+			return 0, fmt.Errorf("error updating client: %s, %s ", client.MAC.String(), ip)
 		}
-		log.WithFields(log.Fields{"clientmac": clientHwAddr, "clientip": clientIP}).Error("ARP mac/ip pair does not exist")
-		c.PrintTable()
-	}()
+
+		return n, nil
+	}
+
+	log.WithFields(log.Fields{"clientmac": client.MAC, "clientip": ip}).Warnf("ARP client attempting to get same IP %s", targetIP)
+
+	return 0, err
 }
 
 // ListenAndServe listen for ARP packets and action these.
@@ -220,12 +222,14 @@ func (c *Handler) ListenAndServe(scanInterval time.Duration) {
 			continue
 		}
 
+		c.mutex.Lock()
 		if sender.Online == false {
 			sender.Online = true
 			notify++
 			log.WithFields(log.Fields{"clientmac": sender.MAC, "clientip": sender.IP}).Warn("ARP device is online")
 		}
 		sender.LastUpdate = time.Now()
+		c.mutex.Unlock()
 
 		switch packet.Operation {
 

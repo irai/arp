@@ -102,49 +102,42 @@ func (c *Handler) FakeIPConflict(clientHwAddr net.HardwareAddr, clientIP net.IP)
 	}()
 }
 
-// actionRequestInHuntState respond to a request from a device that is in Hunt state.
+// IPChanged is used to notify that the IP has changed.
 //
-func (c *Handler) actionRequestInHuntState(client *Entry, senderIP net.IP, targetIP net.IP) (n int, err error) {
+// The package will detect IP changes automatically however some clients do not
+// send ARP Collision Detection packets and hence do not appear as an immediate change.
+// This method is used to accelerate the change for example when a
+// new DHCP entry has been allocated.
+//
+func (c *Handler) IPChanged(clientHwAddr net.HardwareAddr, clientIP net.IP) {
+	client := c.FindMAC(clientHwAddr)
 
-	ip := client.IP // Keep a copy : client.IP may change
-
-	if client == nil || client.State != StateHunt {
-		err = fmt.Errorf("client is not in hunt state %s", client.MAC.String())
-		log.Error("ARP error: ", err)
-		return 0, err
+	// Do nothing if we already have this mac and ip
+	if client != nil && client.IP.Equal(clientIP) {
+		return
 	}
 
-	// We are only interested in ARP Address Conflict Detection packets:
-	//
-	// +============+===+===========+===========+============+============+===================+===========+
-	// | Type       | op| dstMAC    | srcMAC    | SenderMAC  | SenderIP   | TargetMAC         |  TargetIP |
-	// +============+===+===========+===========+============+============+===================+===========+
-	// | ACD probe  | 1 | broadcast | clientMAC | clientMAC  | 0x00       | 0x00              |  targetIP |
-	// | ACD announ | 1 | broadcast | clientMAC | clientMAC  | clientIP   | ff:ff:ff:ff:ff:ff |  clientIP |
-	// +============+===+===========+===========+============+============+===================+===========+
-	if !senderIP.Equal(net.IPv4zero) && !senderIP.Equal(targetIP) {
-		return 0, nil
+	log.WithFields(log.Fields{"clientmac": clientHwAddr, "clientip": clientIP}).Info("ARP new mac or ip - validating")
+	if err := c.Request(c.config.HostMAC, c.config.HostIP, EthernetBroadcast, clientIP); err != nil {
+		log.WithFields(log.Fields{"clientmac": clientHwAddr, "clientip": clientIP}).Error("ARP request failed", err)
 	}
 
-	log.WithFields(log.Fields{"clientmac": client.MAC, "clientip": ip}).Infof("ARP request in hunt state for %s", targetIP)
+	go func() {
+		for i := 0; i < 5; i++ {
+			time.Sleep(time.Second * 2)
+			if entry := c.FindMAC(clientHwAddr); entry != nil && entry.IP.Equal(clientIP) {
+				log.WithFields(log.Fields{"clientmac": clientHwAddr, "clientip": clientIP}).Info("ARP found mac")
+				return
+			}
 
-	// Record new IP in ARP table if address has changed.
-	// Stop hunting it. The spoof function will detect the mac changed to normal
-	// and delete the virtual IP.
-	//
-	if !targetIP.Equal(ip) { // is this a new IP?
-		n := c.actionUpdateClient(client, client.MAC, targetIP)
-		if n != 1 {
-			log.WithFields(log.Fields{"clientmac": client.MAC.String(), "clientip": ip}).Warnf("ARP failed to change IP to %s", targetIP)
-			return 0, fmt.Errorf("error updating client: %s, %s ", client.MAC.String(), ip)
+			// Silent request
+			if err := c.request(c.config.HostMAC, c.config.HostIP, EthernetBroadcast, clientIP); err != nil {
+				log.WithFields(log.Fields{"clientmac": clientHwAddr, "clientip": clientIP}).Error("ARP request 2 failed", err)
+			}
 		}
-
-		return n, nil
-	}
-
-	log.Warnf("ARP client attempting to get same IP previous %s new %s", ip, targetIP)
-
-	return 0, err
+		log.WithFields(log.Fields{"clientmac": clientHwAddr, "clientip": clientIP}).Error("ARP mac/ip pair does not exist")
+		c.PrintTable()
+	}()
 }
 
 // spoofLoop create a virtual host to handle this IP and will spoof
@@ -183,6 +176,8 @@ func (c *Handler) spoofLoop(client *Entry) {
 		// Use VirtualHost to request ownership of the IP; try to force target to acquire another IP
 		c.forceAnnouncement(virtual.MAC, virtual.IP)
 
+		// 4 second re-arp seem to be adequate;
+		// Experimented with 300ms but no noticeable improvement other the chatty net.
 		time.Sleep(time.Second * 4)
 	}
 }

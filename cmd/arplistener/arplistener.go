@@ -2,10 +2,12 @@ package main
 
 import (
 	"bufio"
+	"encoding/binary"
 	"flag"
 	"fmt"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -38,8 +40,12 @@ func main() {
 		log.Fatal("error cannot get host ip and mac ", err)
 	}
 
-	HomeLAN := net.IPNet{IP: net.ParseIP("192.168.0.0").To4(), Mask: net.CIDRMask(25, 32)}
-	HomeRouterIP := net.ParseIP("192.168.0.1").To4()
+	HomeLAN := net.IPNet{IP: net.IPv4(HostIP[0], HostIP[1], HostIP[2], 0), Mask: net.CIDRMask(25, 32)}
+	HomeRouterIP, err := getDefaultGateway()
+	if err != nil {
+		log.Fatal("cannot get default gateway ", err)
+	}
+	log.Info("Router IP: ", HomeRouterIP, "Home LAN: ", HomeLAN)
 
 	c, err := arp.NewHandler(NIC, HostMAC, HostIP, HomeRouterIP, HomeLAN)
 	if err != nil {
@@ -176,4 +182,59 @@ func SetLogLevel(level string) (err error) {
 	}
 
 	return nil
+}
+
+const (
+	file  = "/proc/net/route"
+	line  = 1    // line containing the gateway addr. (first line: 0)
+	sep   = "\t" // field separator
+	field = 2    // field containing hex gateway address (first field: 0)
+)
+
+// NICDefaultGateway read the default gateway from linux route file
+//
+// file: /proc/net/route file:
+//   Iface   Destination Gateway     Flags   RefCnt  Use Metric  Mask
+//   eth0    00000000    C900A8C0    0003    0   0   100 00000000    0   00
+//   eth0    0000A8C0    00000000    0001    0   0   100 00FFFFFF    0   00
+//
+func getDefaultGateway() (gw net.IP, err error) {
+
+	file, err := os.Open(file)
+	if err != nil {
+		log.Error("NIC cannot open route file ", err)
+		return net.IPv4zero, err
+	}
+	defer file.Close()
+
+	ipd32 := net.IP{}
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+
+		// jump to line containing the gateway address
+		for i := 0; i < line; i++ {
+			scanner.Scan()
+		}
+
+		// get field containing gateway address
+		tokens := strings.Split(scanner.Text(), sep)
+		gatewayHex := "0x" + tokens[field]
+
+		// cast hex address to uint32
+		d, _ := strconv.ParseInt(gatewayHex, 0, 64)
+		d32 := uint32(d)
+
+		// make net.IP address from uint32
+		ipd32 = make(net.IP, 4)
+		binary.LittleEndian.PutUint32(ipd32, d32)
+		fmt.Printf("NIC default gateway is %T --> %[1]v\n", ipd32)
+
+		// format net.IP to dotted ipV4 string
+		//ip := net.IP(ipd32).String()
+		//fmt.Printf("%T --> %[1]v\n", ip)
+
+		// exit scanner
+		break
+	}
+	return ipd32, nil
 }
