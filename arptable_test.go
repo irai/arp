@@ -65,7 +65,7 @@ func Test_DeleteVirtualMAC(t *testing.T) {
 	if len(h.table) != 3 || entry2 != h.FindMAC(mac2) || entry2 != h.FindIP(ip2) {
 		t.Error("expected cannot find entry ", mac2.String(), ip2)
 	}
-	h.deleteVirtualMAC(ip2)
+	h.deleteVirtualMAC(entry2)
 
 	if len(h.table) != 3 || h.FindMAC(mac2) != nil || h.FindIP(ip2) != nil {
 		t.Error("expected cannot find entry ", mac2.String(), ip2)

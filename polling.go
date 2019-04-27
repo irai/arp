@@ -44,7 +44,7 @@ func (c *Handler) pollingLoop(checkNewDevicesInterval time.Duration) (err error)
 func (c *Handler) confirmIsActive() {
 
 	c.mutex.Lock()
-	table := c.table[:] // fix the table len
+	table := c.table // fix the table slice; c.table may change
 	c.mutex.Unlock()
 
 	now := time.Now()
@@ -53,33 +53,29 @@ func (c *Handler) confirmIsActive() {
 	deleteDeadline := now.Add(time.Minute * 60 * -1)                            // Delete entries that have not responded in last hour
 
 	log.Info("ARP refresh online devices")
-	for i := range table {
+	for i, entry := range table {
 
 		// Ignore empty entries
-		if table[i] == nil {
+		if entry == nil {
 			continue
 		}
 
 		// Delete from ARP table if the device was not seen for the last hour
-		if table[i].LastUpdate.Before(deleteDeadline) {
-			if table[i].Online == true {
-				log.Warn("ARP device is not offline during delete", table[i].MAC)
+		if entry.LastUpdate.Before(deleteDeadline) {
+			if entry.Online == true {
+				log.Warn("ARP device is not offline during delete", entry.MAC)
 			}
-			log.WithFields(log.Fields{"clientmac": table[i].MAC, "clientip": table[i].IP}).
-				Infof("ARP delete entry online %5v state %10s", table[i].Online, table[i].State)
+			log.WithFields(log.Fields{"clientmac": entry.MAC, "clientip": entry.IP}).
+				Infof("ARP delete entry online %5v state %10s", entry.Online, entry.State)
 
-			// if in Hunt mode, delete virtual entry too.
-			if table[i].State == StateHunt {
-				c.deleteVirtualMAC(table[i].IP)
-			}
 			c.mutex.Lock()
-			table[i] = nil
+			table[i] = nil // use the index to set the array to nil
 			c.mutex.Unlock()
 			continue
 		}
 
 		// Don't probe virtual entries - these are always online until deletion
-		if table[i].State == StateVirtualHost {
+		if entry.State == StateVirtualHost {
 			continue
 		}
 
@@ -87,24 +83,24 @@ func (c *Handler) confirmIsActive() {
 		//   1) device is online and have not received an update recently; or
 		//   2) device is offline and no more than one hour has passed.
 		//
-		if table[i].LastUpdate.Before(refreshDeadline) {
-			if err := c.request(c.config.HostMAC, c.config.HostIP, table[i].MAC, table[i].IP); err != nil {
-				log.WithFields(log.Fields{"clientmac": table[i].MAC, "clientip": table[i].IP}).Error("Error ARP request: ", err)
+		if entry.LastUpdate.Before(refreshDeadline) {
+			if err := c.request(c.config.HostMAC, c.config.HostIP, entry.MAC, entry.IP); err != nil {
+				log.WithFields(log.Fields{"clientmac": entry.MAC, "clientip": entry.IP}).Error("Error ARP request: ", err)
 			}
 
 			// Give it a chance to update
 			time.Sleep(time.Millisecond * 15)
 
-			if table[i].LastUpdate.Before(offlineDeadline) {
-				if table[i].Online == true {
-					log.WithFields(log.Fields{"clientmac": table[i].MAC, "clientip": table[i].IP}).Warn("ARP device is offline")
+			if entry.LastUpdate.Before(offlineDeadline) {
+				if entry.Online == true {
+					log.WithFields(log.Fields{"clientmac": entry.MAC, "clientip": entry.IP}).Warn("ARP device is offline")
 
-					table[i].Online = false
-					table[i].LastUpdate = now
+					entry.Online = false
+					entry.LastUpdate = now
 
 					// Notify upstream the device changed to offline
 					if c.notification != nil {
-						c.notification <- *table[i]
+						c.notification <- *entry
 					}
 				}
 			}

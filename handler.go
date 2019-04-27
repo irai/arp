@@ -59,7 +59,7 @@ func NewHandler(nic string, hostMAC net.HardwareAddr, hostIP net.IP, routerIP ne
 		return nil, err
 	}
 
-	// Set the table capacity to 256. This is the maximum number of entries 
+	// Set the table capacity to 256. This is the maximum number of entries
 	// in current implementation (i.e. the logic assume IPv4/24).
 	c.table = make([]*Entry, 0, 256)
 	c.config.NIC = nic
@@ -80,8 +80,11 @@ func NewHandler(nic string, hostMAC net.HardwareAddr, hostIP net.IP, routerIP ne
 // change state between online and offline.
 func (c *Handler) AddNotificationChannel(notification chan<- Entry) {
 	c.notification = notification
-	for i := range c.table {
-		c.notification <- *c.table[i]
+	c.mutex.Lock()
+	table := c.table
+	c.mutex.Unlock()
+	for i := range table {
+		c.notification <- *table[i]
 	}
 }
 
@@ -237,11 +240,7 @@ func (c *Handler) ListenAndServe(scanInterval time.Duration) {
 			}
 
 			// if target is virtual host, reply and return
-			target := c.FindIP(packet.TargetIP)
-			if target != nil {
-				log.WithFields(log.Fields{"ip": target.IP, "mac": target.MAC}).Info("ARP found target", *target)
-			}
-			if target != nil && target.State == StateVirtualHost {
+			if target := c.FindVirtualIP(packet.TargetIP); target != nil {
 				log.WithFields(log.Fields{"ip": target.IP, "mac": target.MAC}).Info("ARP sending reply for virtual mac")
 				c.reply(target.MAC, target.IP, EthernetBroadcast, target.IP)
 				break // break the switch

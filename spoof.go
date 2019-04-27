@@ -50,12 +50,12 @@ func (c *Handler) ForceIPChange(clientHwAddr net.HardwareAddr, clientIP net.IP) 
 		return err
 	}
 
-	// Set client state to Hunt and create a virtual host to handle this IP
-	c.arpTableAppend(StateVirtualHost, newVirtualHardwareAddr(), client.IP)
+	// Set client to Hunt
 	client.State = StateHunt
+
 	// client.IP = nextFakeIP()
 
-	// spoof client until end of hunt phase 
+	// spoof client until end of hunt phase
 	go c.spoofLoop(client)
 
 	return nil
@@ -78,7 +78,7 @@ func (c *Handler) StopIPChange(clientHwAddr net.HardwareAddr) (err error) {
 		return err
 	}
 
-	c.deleteVirtualMAC(client.IP)
+	// this will terminate the spoof gorotutine and delete the Virtual MAC
 	client.State = StateNormal
 	return nil
 }
@@ -129,7 +129,8 @@ func (c *Handler) actionRequestInHuntState(client *Entry, senderIP net.IP, targe
 	log.WithFields(log.Fields{"clientmac": client.MAC, "clientip": ip}).Infof("ARP request in hunt state for %s", targetIP)
 
 	// Record new IP in ARP table if address has changed.
-	// Stop hunting it.
+	// Stop hunting it. The spoof function will detect the mac changed to normal
+	// and delete the virtual IP.
 	//
 	if !targetIP.Equal(ip) { // is this a new IP?
 		n := c.actionUpdateClient(client, client.MAC, targetIP)
@@ -137,82 +138,53 @@ func (c *Handler) actionRequestInHuntState(client *Entry, senderIP net.IP, targe
 			log.WithFields(log.Fields{"clientmac": client.MAC.String(), "clientip": ip}).Warnf("ARP failed to change IP to %s", targetIP)
 			return 0, fmt.Errorf("error updating client: %s, %s ", client.MAC.String(), ip)
 		}
-		c.deleteVirtualMAC(ip)
-		defer c.PrintTable()
+
 		return n, nil
 	}
 
 	log.Warnf("ARP client attempting to get same IP previous %s new %s", ip, targetIP)
 
-	err = c.actionClaimIP(client)
-
 	return 0, err
 }
 
+// spoofLoop create a virtual host to handle this IP and will spoof
+//           the target until it changes IP or go offline.
+//
+// It will send a number of ARP packets to:
+//   1. spoof the client arp table to send router packets to us
+//   2. claim the ownership of the IP
+//
 func (c *Handler) spoofLoop(client *Entry) {
-	// log.WithFields(log.Fields{"clientmac": client.MAC.String(), "ip": client.IP}).Info("ARP hunt start")
-	// defer log.WithFields(log.Fields{"clientmac": client.MAC.String(), "ip": client.IP}).Info("ARP hunt end")
 
 	// Goroutine pool
 	h := c.workers.Begin("ARP hunt " + client.MAC.String())
 	defer h.End()
 
-	// In the loop, need to search for MAC in case it has been deleted.
-	mac := dupMAC(client.MAC)
+	// Virtual Host will exist while this goroutine is running
+	virtual := c.arpTableAppend(StateVirtualHost, newVirtualHardwareAddr(), client.IP)
+
+	// Always search for MAC in case it has been deleted.
+	mac := client.MAC
 	for {
-		log.Error("FIND client", mac)
 		client = c.FindMAC(mac)
-		log.Error("FIND end client", mac)
 		if h.Stopping() == true || client == nil || client.State != StateHunt {
+			c.deleteVirtualMAC(virtual)
 			return
 		}
-		log.Error("SPOOF client", *client)
 
-		// Only spoof if device is online; if not the device is dormant or not present.
-		if client.Online {
-			log.WithFields(log.Fields{"clientmac": client.MAC, "clientip": client.IP}).Info("ARP spoof client")
-			c.actionClaimIP(client)
-		}
-		log.Error("SPOOF end client", *client)
+		log.WithFields(log.Fields{"clientmac": mac.String(), "clientip": virtual.IP}).Warn("ARP claiming IP")
+
+		// Re-arp target to change router to host so all traffic comes to us
+		// i.e. tell target I am 192.168.0.1
+		//
+		// Use virtual IP as it is guaranteed to not change.
+		c.forceSpoof(client.MAC, virtual.IP) // NOTE: virtual is the target IP
+
+		// Use VirtualHost to request ownership of the IP; try to force target to acquire another IP
+		c.forceAnnouncement(virtual.MAC, virtual.IP)
+
 		time.Sleep(time.Second * 4)
 	}
-}
-
-// actionClaimIP send a number of ARP request to both:
-//   1. spoof the client to send all packets to us
-//   2. claim the ownership of the IP
-//
-// The client must be in Hunt state; which means it has an equivalent Virtual host
-func (c *Handler) actionClaimIP(client *Entry) (err error) {
-	log.WithFields(log.Fields{"clientmac": client.MAC.String(), "clientip": client.IP}).Warnf("ARP claim IP %s", client.IP.String())
-	defer log.WithFields(log.Fields{"clientmac": client.MAC.String(), "clientip": client.IP}).Errorf("ARP END claim IP %s", client.IP.String())
-
-	// WARNING: There is a race here.
-	//          Client.IP will change when the client changes IP address
-	c.mutex.Lock()
-	if client.State != StateHunt {
-		c.mutex.Unlock()
-		log.WithFields(log.Fields{"clientmac": client.MAC.String(), "clientip": client.IP}).Errorf("ARP not in Hunt state %s", client.IP)
-		return
-	}
-	ip := client.IP // keep a copy
-	mac := client.MAC
-	c.mutex.Unlock()
-
-	// Re-arp client with to change router to host so all traffic comes to us
-	// i.e. tell client I am 192.168.0.1
-	c.forceSpoof(mac, ip)
-
-	// Use VirtualHost to request ownership of the IP; this will force the client to acquire another IP
-	virtual := c.FindIP(ip)
-	if virtual == nil || virtual.State != StateVirtualHost {
-		err = fmt.Errorf("cannot find virtual host for %s", ip)
-		log.Error("ARP error virtual host", err)
-		return err
-	}
-	c.forceAnnouncement(virtual.MAC, virtual.IP)
-
-	return nil
 }
 
 // forceSpoof send gratuitous ARP packet to spoof client MAC table to send router packets to host instead of the router
