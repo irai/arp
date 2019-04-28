@@ -46,7 +46,7 @@ func (c *Handler) ForceIPChange(clientHwAddr net.HardwareAddr, clientIP net.IP) 
 
 	if client.IP.Equal(clientIP) == false {
 		err := fmt.Errorf("ARP capture error missmatch in client table with actual client %s vs %s", client.IP.String(), clientIP.String())
-		log.Error("ARP unexpected IP missmatch", err)
+		log.Warn("ARP unexpected IP missmatch - do nothing", err)
 		return err
 	}
 
@@ -73,9 +73,7 @@ func (c *Handler) StopIPChange(clientHwAddr net.HardwareAddr) (err error) {
 	}
 
 	if client.State != StateHunt {
-		log.WithFields(log.Fields{"clientmac": client.MAC.String(), "clientip": client.IP}).Error("ARP client is not in hunt state")
-		err = fmt.Errorf("mac %s is not in hunt state", clientHwAddr.String())
-		return err
+		log.WithFields(log.Fields{"clientmac": client.MAC.String(), "clientip": client.IP}).Warn("ARP client is not in hunt state", client.State)
 	}
 
 	// this will terminate the spoof gorotutine and delete the Virtual MAC
