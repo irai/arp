@@ -75,6 +75,11 @@ func (c *Handler) confirmIsActive() {
 		*local = *e // local copy to avoid race
 		c.mutex.Unlock()
 
+		// Don't probe virtual entries - these are always online until deletion
+		if local.State == StateVirtualHost {
+			continue
+		}
+
 		// Delete from ARP table if the device was not seen for the last hour
 		if local.LastUpdate.Before(deleteDeadline) {
 			if local.Online == true {
@@ -86,11 +91,6 @@ func (c *Handler) confirmIsActive() {
 			c.mutex.Lock()
 			table[i] = nil // use the index to set the array to nil
 			c.mutex.Unlock()
-			continue
-		}
-
-		// Don't probe virtual entries - these are always online until deletion
-		if local.State == StateVirtualHost {
 			continue
 		}
 
