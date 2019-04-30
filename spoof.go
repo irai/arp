@@ -148,7 +148,7 @@ func (c *Handler) IPChanged(clientHwAddr net.HardwareAddr, clientIP net.IP) {
 func (c *Handler) spoofLoop(client *Entry) {
 
 	// Goroutine pool
-	h := c.workers.Begin("ARP hunt " + client.MAC.String())
+	h := GoroutinePool.Begin("ARP hunt " + client.MAC.String())
 	defer h.End()
 
 	// Virtual Host will exist while this goroutine is running

@@ -18,7 +18,7 @@ const (
 // checkNewDevicesInterval is the the duration between full scans
 func (c *Handler) pollingLoop(checkNewDevicesInterval time.Duration) (err error) {
 	// Goroutine pool
-	h := c.workers.Begin("pollingLoop")
+	h := GoroutinePool.Begin("pollingLoop")
 	defer h.End()
 
 	c.scanNetwork()
@@ -42,7 +42,7 @@ func (c *Handler) pollingLoop(checkNewDevicesInterval time.Duration) (err error)
 				c.config.RouterMAC = router.MAC
 			}
 
-		case <-c.workers.StopChannel:
+		case <-GoroutinePool.StopChannel:
 			return nil
 
 		case <-checkDeviceIsActive:

@@ -17,6 +17,7 @@ import (
 
 var (
 	ifaceFlag = flag.String("i", "eth0", "network interface to listen to")
+	defaultGw = flag.String("g", "", "default gateway IPv4 (-g 192.168.1.1)")
 
 /***
 CIDRFlag = flag.String("cidr", "", "CIDR destination to probe with ARP request")
@@ -41,7 +42,10 @@ func main() {
 	}
 
 	HomeLAN := net.IPNet{IP: net.IPv4(HostIP[0], HostIP[1], HostIP[2], 0), Mask: net.CIDRMask(25, 32)}
-	HomeRouterIP, err := getDefaultGateway()
+	HomeRouterIP := net.ParseIP(*defaultGw)
+	if HomeRouterIP == nil {
+	HomeRouterIP, err = getLinuxDefaultGateway()
+	}
 	if err != nil {
 		log.Fatal("cannot get default gateway ", err)
 	}
@@ -139,6 +143,10 @@ func getMAC(c *arp.Handler, text string) *arp.Entry {
 
 func NICGetInformation(nic string) (ip net.IP, mac net.HardwareAddr, err error) {
 
+	all, err := net.Interfaces()
+	for _ , v:= range all {
+		log.Debug("interface name ", v.Name, v.HardwareAddr.String())
+	}
 	ifi, err := net.InterfaceByName(nic)
 	if err != nil {
 		log.WithFields(log.Fields{"nic": nic}).Errorf("NIC cannot open nic %s error %s ", nic, err)
@@ -154,9 +162,13 @@ func NICGetInformation(nic string) (ip net.IP, mac net.HardwareAddr, err error) 
 	}
 
 	for i := range addrs {
-		tmp, _, _ := net.ParseCIDR(addrs[i].String())
+		tmp, _, err := net.ParseCIDR(addrs[i].String())
+		if err != nil {
+			log.WithFields(log.Fields{"nic": nic}).Errorf("NIC cannot parse IP %s error %s ", addrs[i].String(), err)
+		}
+		log.Info("IP=", tmp)
 		ip = tmp.To4()
-		if !ip.Equal(net.IPv4zero) {
+		if ip != nil && !ip.Equal(net.IPv4zero) {
 			break
 		}
 	}
@@ -198,7 +210,7 @@ const (
 //   eth0    00000000    C900A8C0    0003    0   0   100 00000000    0   00
 //   eth0    0000A8C0    00000000    0001    0   0   100 00FFFFFF    0   00
 //
-func getDefaultGateway() (gw net.IP, err error) {
+func getLinuxDefaultGateway() (gw net.IP, err error) {
 
 	file, err := os.Open(file)
 	if err != nil {

@@ -27,12 +27,11 @@ type Handler struct {
 	table        []*Entry
 	notification chan<- Entry // notification channel for state change
 	// tranChannel  chan<- Entry // notification channel for arp hunt ent
-	config  configuration
-	workers *GoroutinePool
+	config configuration
 }
 
 var (
-	cidr_169_254 = net.IPNet{IP: net.IPv4(169, 254, 0, 0), Mask: net.IPv4Mask(255, 255, 0, 0)}
+	cidr169_254 = net.IPNet{IP: net.IPv4(169, 254, 0, 0), Mask: net.IPv4Mask(255, 255, 0, 0)}
 )
 
 func getArpClient(nic string) (*marp.Client, error) {
@@ -69,8 +68,6 @@ func NewHandler(nic string, hostMAC net.HardwareAddr, hostIP net.IP, routerIP ne
 	c.config.RouterIP = routerIP
 	c.config.HomeLAN = homeLAN
 
-	c.workers = goroutinepool.New("ARP")
-
 	log.WithFields(log.Fields{"hostinterface": c.config.NIC, "hostmac": c.config.HostMAC.String(),
 		"hostip": c.config.HostIP.String(), "lanrouter": c.config.RouterIP.String()}).Info("ARP configuration")
 
@@ -96,7 +93,7 @@ func (c *Handler) Stop() error {
 	c.client.Close()
 
 	// closing stopChannel will cause all waiting goroutines to exit
-	return c.workers.Stop()
+	return GoroutinePool.Stop()
 }
 
 func (c *Handler) actionUpdateClient(client *Entry, senderMAC net.HardwareAddr, senderIP net.IP) int {
@@ -106,7 +103,7 @@ func (c *Handler) actionUpdateClient(client *Entry, senderMAC net.HardwareAddr, 
 	if !client.IP.Equal(senderIP) && !senderIP.Equal(net.IPv4zero) &&
 		!bytes.Equal(senderMAC, c.config.RouterMAC) &&
 		!senderIP.Equal(c.config.HostIP) &&
-		!cidr_169_254.Contains(senderIP) {
+		!cidr169_254.Contains(senderIP) {
 
 		c.mutex.Lock()
 		client.IP = dupIP(senderIP)
@@ -179,7 +176,7 @@ func (c *Handler) actionRequestInHuntState(client *Entry, senderIP net.IP, targe
 func (c *Handler) ListenAndServe(scanInterval time.Duration) {
 
 	// Goroutine pool
-	h := c.workers.Begin("listenandserve")
+	h := GoroutinePool.Begin("listenandserve")
 	defer h.End()
 
 	// Goroutine to continuosly scan for network devices
