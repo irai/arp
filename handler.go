@@ -27,7 +27,8 @@ type Handler struct {
 	table        []*Entry
 	notification chan<- Entry // notification channel for state change
 	// tranChannel  chan<- Entry // notification channel for arp hunt ent
-	config configuration
+	config        configuration
+	goroutinePool *goroutinePool // handler specific pool in case we have two instances
 }
 
 var (
@@ -53,6 +54,7 @@ func getArpClient(nic string) (*marp.Client, error) {
 // NewHandler creates an ARP handler for a given interface.
 func NewHandler(nic string, hostMAC net.HardwareAddr, hostIP net.IP, routerIP net.IP, homeLAN net.IPNet) (c *Handler, err error) {
 	c = &Handler{}
+	c.goroutinePool = GoroutinePool.new("arppool")
 	c.client, err = getArpClient(nic)
 	if err != nil {
 		log.WithFields(log.Fields{"nic": nic}).Error("ARP error in dial", err)
@@ -100,7 +102,7 @@ func (c *Handler) Stop() error {
 	}()
 
 	// closing stopChannel will cause all waiting goroutines to exit
-	return GoroutinePool.Stop()
+	return c.goroutinePool.Stop()
 }
 
 func (c *Handler) actionUpdateClient(client *Entry, senderMAC net.HardwareAddr, senderIP net.IP) int {
@@ -183,7 +185,7 @@ func (c *Handler) actionRequestInHuntState(client *Entry, senderIP net.IP, targe
 func (c *Handler) ListenAndServe(scanInterval time.Duration) {
 
 	// Goroutine pool
-	h := GoroutinePool.Begin("ARP ListenAndServe")
+	h := c.goroutinePool.Begin("ARP ListenAndServe")
 	defer h.End()
 
 	// Goroutine to continuosly scan for network devices

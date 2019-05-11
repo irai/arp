@@ -44,7 +44,7 @@ func main() {
 	HomeLAN := net.IPNet{IP: net.IPv4(HostIP[0], HostIP[1], HostIP[2], 0), Mask: net.CIDRMask(25, 32)}
 	HomeRouterIP := net.ParseIP(*defaultGw)
 	if HomeRouterIP == nil {
-	HomeRouterIP, err = getLinuxDefaultGateway()
+		HomeRouterIP, err = getLinuxDefaultGateway()
 	}
 	if err != nil {
 		log.Fatal("cannot get default gateway ", err)
@@ -55,9 +55,15 @@ func main() {
 	if err != nil {
 		log.Fatal("error connection to websocket server", err)
 	}
-
 	go c.ListenAndServe(time.Second * 30 * 5)
 
+	c.Stop()
+
+	c, err = arp.NewHandler(NIC, HostMAC, HostIP, HomeRouterIP, HomeLAN)
+	if err != nil {
+		log.Fatal("error connection to websocket server", err)
+	}
+	go c.ListenAndServe(time.Second * 30 * 5)
 	arpChannel := make(chan arp.Entry, 16)
 	c.AddNotificationChannel(arpChannel)
 
@@ -144,7 +150,7 @@ func getMAC(c *arp.Handler, text string) *arp.Entry {
 func NICGetInformation(nic string) (ip net.IP, mac net.HardwareAddr, err error) {
 
 	all, err := net.Interfaces()
-	for _ , v:= range all {
+	for _, v := range all {
 		log.Debug("interface name ", v.Name, v.HardwareAddr.String())
 	}
 	ifi, err := net.InterfaceByName(nic)

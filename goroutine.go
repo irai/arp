@@ -66,6 +66,13 @@ func (h *goroutinePool) Begin(name string) *goroutine {
 	return &g
 }
 
+func (h *goroutinePool) Stopping() bool {
+	if atomic.LoadInt32(&h.stopping) != 0 {
+		return true
+	}
+	return false
+}
+
 func (g *goroutine) End() {
 	atomic.AddInt32(&g.pool.n, -1)
 	stopping := atomic.LoadInt32(&g.pool.stopping)

@@ -18,7 +18,7 @@ const (
 // checkNewDevicesInterval is the the duration between full scans
 func (c *Handler) pollingLoop(checkNewDevicesInterval time.Duration) (err error) {
 	// Goroutine pool
-	h := GoroutinePool.Begin("pollingLoop")
+	h := c.goroutinePool.Begin("ARP pollingLoop")
 	defer h.End()
 
 	c.scanNetwork()
@@ -42,7 +42,7 @@ func (c *Handler) pollingLoop(checkNewDevicesInterval time.Duration) (err error)
 				c.config.RouterMAC = router.MAC
 			}
 
-		case <-GoroutinePool.StopChannel:
+		case <-c.goroutinePool.StopChannel:
 			return nil
 
 		case <-checkDeviceIsActive:
@@ -142,6 +142,9 @@ func (c *Handler) scanNetwork() error {
 		}
 
 		err := c.request(c.config.HostMAC, c.config.HostIP, EthernetBroadcast, ip)
+		if c.goroutinePool.Stopping() {
+			return nil
+		}
 		if err != nil {
 			log.Error("ARP request error ", err)
 			if err1, ok := err.(net.Error); ok && err1.Temporary() {
