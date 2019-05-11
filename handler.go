@@ -186,7 +186,7 @@ func (c *Handler) actionRequestInHuntState(client *Entry, senderIP net.IP, targe
 func (c *Handler) ListenAndServe(scanInterval time.Duration) {
 
 	// Goroutine pool
-	h := c.workers.Begin("listenandserve")
+	h := c.workers.Begin("ARP ListenAndServe")
 	defer h.End()
 
 	// Goroutine to continuosly scan for network devices
