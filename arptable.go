@@ -71,7 +71,7 @@ func (c *Handler) FindIP(ip net.IP) *Entry {
 	for i := range c.table {
 		// When in Hunt state, the IP is claimed by a virtual host; ignore the entry
 		if c.table[i] != nil &&
-			c.table[i].IP.Equal(ip) && c.table[i].State != StateHunt {
+			c.table[i].IP.Equal(ip) && c.table[i].State != StateVirtualHost {
 			return c.table[i]
 		}
 	}
