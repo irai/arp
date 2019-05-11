@@ -35,6 +35,8 @@ const (
 // PrintTable will print the ARP table to stdout.
 func (c *Handler) PrintTable() {
 	log.Infof("ARP Table: %v entries", len(c.table))
+
+	// Don't mutex lock; it is called from multiple locked locations
 	table := c.table
 	for _, v := range table {
 		if v != nil {
@@ -152,7 +154,8 @@ func (c *Handler) deleteVirtualMAC(virtual *Entry) {
 			return
 		}
 	}
-	log.WithFields(log.Fields{"ip": virtual.IP, "mac": virtual.MAC.String()}).Error("ARP deleting non-existent virtual mac")
+	log.WithFields(log.Fields{"ip": virtual.IP, "mac": virtual.MAC.String()}).Error("ARP deleting non-existent virtual mac", *virtual)
+	c.PrintTable()
 }
 
 func newVirtualHardwareAddr() net.HardwareAddr {

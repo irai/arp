@@ -18,7 +18,7 @@ const (
 // checkNewDevicesInterval is the the duration between full scans
 func (c *Handler) pollingLoop(checkNewDevicesInterval time.Duration) (err error) {
 	// Goroutine pool
-	h := c.workers.Begin("pollingLoop")
+	h := GoroutinePool.Begin("pollingLoop")
 	defer h.End()
 
 	c.scanNetwork()
@@ -42,7 +42,7 @@ func (c *Handler) pollingLoop(checkNewDevicesInterval time.Duration) (err error)
 				c.config.RouterMAC = router.MAC
 			}
 
-		case <-c.workers.StopChannel:
+		case <-GoroutinePool.StopChannel:
 			return nil
 
 		case <-checkDeviceIsActive:
@@ -75,6 +75,11 @@ func (c *Handler) confirmIsActive() {
 		*local = *e // local copy to avoid race
 		c.mutex.Unlock()
 
+		// Don't probe virtual entries - these are always online until deletion
+		if local.State == StateVirtualHost {
+			continue
+		}
+
 		// Delete from ARP table if the device was not seen for the last hour
 		if local.LastUpdate.Before(deleteDeadline) {
 			if local.Online == true {
@@ -86,11 +91,6 @@ func (c *Handler) confirmIsActive() {
 			c.mutex.Lock()
 			table[i] = nil // use the index to set the array to nil
 			c.mutex.Unlock()
-			continue
-		}
-
-		// Don't probe virtual entries - these are always online until deletion
-		if local.State == StateVirtualHost {
 			continue
 		}
 

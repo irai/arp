@@ -3,52 +3,53 @@ package arp
 import (
 	"errors"
 	"sync"
+	"sync/atomic"
+
 	"time"
 
 	log "github.com/sirupsen/logrus"
 )
 
-// GoroutinePool tracks background goroutines and enable termination.
-//
-// Usage:
-// workers base.GoroutinePool
-// workers.init("name")
-//
-// go {
-//     h := c.workers.Begin()
-//     defer h.End()}
-//
-//     for {
-//      select {
-//      case <-workers.StopChannel:
-//        return
-//      }
-//     }
-//  }()
-//
-// workers.Stop()
-type GoroutinePool struct {
+type goroutinePool struct {
 	// goroutines should wait on StopChannel with "<- StopChannel"
 	StopChannel    chan struct{}
 	stoppedChannel chan *goroutine
-	n              int
-	Stopping       bool
+	n              int32 // atomic value
+	stopping       int32 // atomic value
 	name           string
 	mutex          sync.Mutex
 }
 
 type goroutine struct {
 	name string
-	pool *GoroutinePool
+	pool *goroutinePool
 }
 
-var goroutinepool *GoroutinePool
+// GoroutinePool tracks background goroutines and enable termination.
+//
+// Usage:
+//
+// go {
+//     h := GoroutinePool.Begin("name")
+//     defer h.End()}
+//
+//     for {
+//      select {
+//      case <-GoroutinePool.StopChannel:
+//        return
+//      }
+//     }
+//  }()
+//
+// GoroutinePool.Stop()
+var GoroutinePool = &goroutinePool{name: "default", stopping: 0, StopChannel: make(chan struct{}), stoppedChannel: make(chan *goroutine)}
 
-// New create a new go routine pool
-func (h *GoroutinePool) New(name string) (ret *GoroutinePool) {
-	ret = &GoroutinePool{}
+// new create a new go routine pool
+// do want to export this yet
+func (h *goroutinePool) new(name string) (ret *goroutinePool) {
+	ret = &goroutinePool{}
 	ret.name = name
-	ret.Stopping = false
+	ret.stopping = 0
 	ret.StopChannel = make(chan struct{})
 	ret.stoppedChannel = make(chan *goroutine)
 
@@ -58,46 +59,37 @@ func (h *GoroutinePool) New(name string) (ret *GoroutinePool) {
 // Begin records the begining of a new goroutine in the pool.
 // name is the name printed on exit
 // server - set to true if this is a background goroutine that should never end
-func (h *GoroutinePool) Begin(name string) *goroutine {
+func (h *goroutinePool) Begin(name string) *goroutine {
 	g := goroutine{name: name, pool: h}
-	h.mutex.Lock()
-	h.n++
-	h.mutex.Unlock()
-	log.Infof("%s %s goroutine started", g.pool.name, g.name)
+	atomic.AddInt32(&h.n, 1)
+	log.Infof("%s goroutine started", g.name)
 	return &g
 }
 
 func (g *goroutine) End() {
-	g.pool.mutex.Lock()
-	g.pool.n--
-	stopping := g.pool.Stopping
-	g.pool.mutex.Unlock()
-	log.Infof("%s %s goroutine completed", g.pool.name, g.name)
-	if stopping {
+	atomic.AddInt32(&g.pool.n, -1)
+	stopping := atomic.LoadInt32(&g.pool.stopping)
+	log.Infof("%s goroutine finished - remaining %d", g.name, atomic.LoadInt32(&g.pool.n))
+	if stopping != 0 {
 		g.pool.stoppedChannel <- g
 	}
 }
 
 // Stop send a channel msg to stop running goroutines
-func (h *GoroutinePool) Stop() error {
+func (h *goroutinePool) Stop() error {
 	// closing stopChannel will cause all waiting goroutines to exit
-	h.mutex.Lock()
-	h.Stopping = true
-	h.mutex.Unlock()
+	atomic.StoreInt32(&h.stopping, 1)
 	close(h.StopChannel)
 
 	for {
-		h.mutex.Lock()
-		n := h.n
-		h.mutex.Unlock()
+		n := atomic.LoadInt32(&h.n)
 		if n <= 0 {
 			return nil
 		}
 
 		select {
 		// wait for n goroutines to finish
-		case g := <-h.stoppedChannel:
-			log.Infof("%s %s stopped - remaining %d", h.name, g.name, h.n)
+		case <-h.stoppedChannel:
 
 		case <-time.After(5 * time.Second):
 			log.Errorf("%s stop timed out", h.name)
@@ -108,8 +100,8 @@ func (h *GoroutinePool) Stop() error {
 
 // Stopping is true if the pool is attempting to stop all goroutines.
 func (g *goroutine) Stopping() bool {
-	g.pool.mutex.Lock()
-	stopping := g.pool.Stopping
-	g.pool.mutex.Unlock()
-	return stopping
+	if stopping := atomic.LoadInt32(&g.pool.stopping); stopping != 0 {
+		return true
+	}
+	return false
 }
