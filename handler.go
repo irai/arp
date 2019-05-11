@@ -81,19 +81,26 @@ func NewHandler(nic string, hostMAC net.HardwareAddr, hostIP net.IP, routerIP ne
 // change state between online and offline.
 func (c *Handler) AddNotificationChannel(notification chan<- Entry) {
 	c.notification = notification
-	c.mutex.Lock()
-	table := c.table
-	c.mutex.Unlock()
-	for i := range table {
-		c.notification <- *table[i]
-	}
+
+	go func() {
+		time.Sleep(time.Millisecond * 50)
+		c.mutex.Lock()
+		table := c.table
+		c.mutex.Unlock()
+		for i := range table {
+			c.notification <- *table[i]
+		}
+	}()
 }
 
 // Stop will terminate the ListenAndServer goroutine as well as all other pending goroutines.
 func (c *Handler) Stop() error {
 
 	// Close the arp socket
-	c.client.Close()
+	go func() {
+		time.Sleep(time.Millisecond * 10)
+		c.client.Close()
+	}()
 
 	// closing stopChannel will cause all waiting goroutines to exit
 	return c.workers.Stop()
