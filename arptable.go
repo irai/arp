@@ -50,7 +50,13 @@ func (c *Handler) PrintTable() {
 func (c *Handler) FindMAC(mac net.HardwareAddr) *Entry {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
+	return c.findMACLocked(mac)
+}
 
+// findMACLocked
+//
+// CAUTION: Lock the mutex before calling this.
+func (c *Handler) findMACLocked(mac net.HardwareAddr) *Entry {
 	for i := range c.table {
 		if c.table[i] != nil && bytes.Equal(c.table[i].MAC, mac) {
 			return c.table[i]
@@ -103,16 +109,18 @@ func (c *Handler) GetTable() (table []*Entry) {
 	return table
 }
 
-func (c *Handler) arpTableAppend(state arpState, clientMAC net.HardwareAddr, clientIP net.IP) (ret *Entry) {
+// arpTableAppendLocked
+//
+// CAUTION: must be called with the mutex already locked. It has a race condition if not locked.
+//          call c.mutex.Lock() before entering this function
+//
+func (c *Handler) arpTableAppendLocked(state arpState, clientMAC net.HardwareAddr, clientIP net.IP) (ret *Entry) {
 	mac := dupMAC(clientMAC) // copy the underlying slice
 	ip := dupIP(clientIP)    // copy the underlysing slice
 
 	log.WithFields(log.Fields{"ip": ip.String(), "mac": mac.String()}).Warn("ARP new mac detected")
 
 	entry := &Entry{State: state, MAC: mac, IP: ip.To4(), LastUpdate: time.Now(), Online: true}
-
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
 
 	// Attempt to reuse deleted entry if available
 	for i := range c.table {

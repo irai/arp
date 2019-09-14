@@ -110,19 +110,17 @@ func (c *Handler) confirmIsActive() {
 			// Give it a chance to update
 			time.Sleep(time.Millisecond * 15)
 
-			if local.LastUpdate.Before(offlineDeadline) {
-				if local.Online == true {
-					log.WithFields(log.Fields{"clientmac": local.MAC, "clientip": local.IP}).Warn("ARP device is offline")
+			// Set to offline if no updates since the offline deadline
+			if local.Online && local.LastUpdate.Before(offlineDeadline) {
+				log.WithFields(log.Fields{"clientmac": local.MAC, "clientip": local.IP}).Warn("ARP device is offline")
 
-					c.mutex.Lock()
-					table[i].Online = false
-					table[i].LastUpdate = now
-					c.mutex.Unlock()
+				c.mutex.Lock()
+				table[i].Online = false
+				c.mutex.Unlock()
 
-					// Notify upstream the device changed to offline
-					if c.notification != nil {
-						c.notification <- *table[i]
-					}
+				// Notify upstream the device changed to offline
+				if c.notification != nil {
+					c.notification <- *table[i]
 				}
 			}
 		}

@@ -152,7 +152,9 @@ func (c *Handler) spoofLoop(client *Entry) {
 	defer h.End()
 
 	// Virtual Host will exist while this goroutine is running
-	virtual := c.arpTableAppend(StateVirtualHost, newVirtualHardwareAddr(), client.IP)
+	c.mutex.Lock()
+	virtual := c.arpTableAppendLocked(StateVirtualHost, newVirtualHardwareAddr(), client.IP)
+	c.mutex.Unlock()
 
 	// Always search for MAC in case it has been deleted.
 	mac := client.MAC

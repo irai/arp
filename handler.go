@@ -215,27 +215,30 @@ func (c *Handler) ListenAndServe(scanInterval time.Duration) {
 
 		notify := 0
 
-		sender := c.FindMAC(packet.SenderHardwareAddr)
+		c.mutex.Lock()
+
+		sender := c.findMACLocked(packet.SenderHardwareAddr)
 		if sender == nil {
-			// If new client, the create a new entry in table
+			// If new client, then create a new entry in table
 			// NOTE: if this is a probe, the sender IP will be Zeros
-			sender = c.arpTableAppend(StateNormal, packet.SenderHardwareAddr, packet.SenderIP)
+			sender = c.arpTableAppendLocked(StateNormal, packet.SenderHardwareAddr, packet.SenderIP)
 			notify++
 		}
 
 		// Skip packets that we sent as virtual host (i.e. we sent these)
 		if sender.State == StateVirtualHost {
+			c.mutex.Unlock()
 			continue
 		}
+		sender.LastUpdate = time.Now()
 
-		c.mutex.Lock()
+		c.mutex.Unlock()
+
 		if sender.Online == false {
 			sender.Online = true
 			notify++
 			log.WithFields(log.Fields{"clientmac": sender.MAC, "clientip": sender.IP}).Warn("ARP device is online")
 		}
-		sender.LastUpdate = time.Now()
-		c.mutex.Unlock()
 
 		switch packet.Operation {
 

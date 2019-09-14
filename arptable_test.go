@@ -17,7 +17,7 @@ var (
 func Test_AddSimple(t *testing.T) {
 
 	h := &Handler{}
-	entry := h.arpTableAppend(StateNormal, mac1, ip1)
+	entry := h.arpTableAppendLocked(StateNormal, mac1, ip1)
 
 	if entry != h.FindMAC(mac1) || entry != h.FindIP(ip1) {
 		t.Error("expected cannot find entry ", mac1.String(), ip1)
@@ -27,9 +27,9 @@ func Test_AddSimple(t *testing.T) {
 func Test_AddMany(t *testing.T) {
 
 	h := &Handler{}
-	entry := h.arpTableAppend(StateNormal, mac1, ip1)
-	entry2 := h.arpTableAppend(StateNormal, mac2, ip2)
-	entry3 := h.arpTableAppend(StateNormal, mac3, ip3)
+	entry := h.arpTableAppendLocked(StateNormal, mac1, ip1)
+	entry2 := h.arpTableAppendLocked(StateNormal, mac2, ip2)
+	entry3 := h.arpTableAppendLocked(StateNormal, mac3, ip3)
 
 	if len(h.table) != 3 || entry3 != h.FindMAC(mac3) || entry3 != h.FindIP(ip3) {
 		h.PrintTable()
@@ -49,7 +49,7 @@ func Test_AddMany(t *testing.T) {
 		t.Error("expected cannot find entry ", mac2.String(), ip2)
 	}
 
-	h.arpTableAppend(StateNormal, mac2, ip2)
+	h.arpTableAppendLocked(StateNormal, mac2, ip2)
 	if len(h.table) != 3 || entry != h.FindMAC(mac1) || entry != h.FindIP(ip1) {
 		h.PrintTable()
 		t.Error("expected cannot find entry ", len(h.table), mac1.String(), ip1)
@@ -58,9 +58,9 @@ func Test_AddMany(t *testing.T) {
 func Test_DeleteVirtualMAC(t *testing.T) {
 
 	h := &Handler{}
-	h.arpTableAppend(StateNormal, mac1, ip1)
-	entry2 := h.arpTableAppend(StateVirtualHost, mac2, ip2)
-	h.arpTableAppend(StateNormal, mac3, ip3)
+	h.arpTableAppendLocked(StateNormal, mac1, ip1)
+	entry2 := h.arpTableAppendLocked(StateVirtualHost, mac2, ip2)
+	h.arpTableAppendLocked(StateNormal, mac3, ip3)
 
 	if len(h.table) != 3 || entry2 != h.FindMAC(mac2) || entry2 != h.FindIP(ip2) {
 		t.Error("expected cannot find entry ", mac2.String(), ip2)
@@ -71,7 +71,7 @@ func Test_DeleteVirtualMAC(t *testing.T) {
 		t.Error("expected cannot find entry ", mac2.String(), ip2)
 	}
 
-	entry2 = h.arpTableAppend(StateNormal, mac2, ip2)
+	entry2 = h.arpTableAppendLocked(StateNormal, mac2, ip2)
 	if len(h.table) != 3 || entry2 != h.FindMAC(mac2) || entry2 != h.FindIP(ip2) {
 		t.Error("expected cannot find entry ", mac2.String(), ip2)
 	}
