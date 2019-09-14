@@ -21,7 +21,11 @@ func (c *Handler) pollingLoop(checkNewDevicesInterval time.Duration) (err error)
 	h := c.goroutinePool.Begin("ARP pollingLoop")
 	defer h.End()
 
-	c.scanNetwork()
+	if checkNewDevicesInterval > 0 {
+		c.scanNetwork()
+	} else {
+		checkNewDevicesInterval = time.Minute * 60 * 24 * 365 * 20 // will never expire
+	}
 
 	// Retrieve router mac if available
 	time.Sleep(time.Millisecond * 300)
