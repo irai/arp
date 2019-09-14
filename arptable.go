@@ -40,7 +40,7 @@ func (c *Handler) PrintTable() {
 	table := c.table
 	for _, v := range table {
 		if v != nil {
-			log.WithFields(log.Fields{"clientmac": v.MAC.String(), "clientip": v.IP.String()}).
+			log.WithFields(log.Fields{"mac": v.MAC.String(), "ip": v.IP.String()}).
 				Infof("ARP table %5v %10s %18s  %14s", v.Online, v.State, v.MAC, v.IP)
 		}
 	}

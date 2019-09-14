@@ -89,7 +89,7 @@ func (c *Handler) confirmIsActive() {
 			if local.Online == true {
 				log.Warn("ARP device is not offline during delete", local.MAC)
 			}
-			log.WithFields(log.Fields{"clientmac": local.MAC, "clientip": local.IP}).
+			log.WithFields(log.Fields{"mac": local.MAC, "ip": local.IP}).
 				Infof("ARP delete entry online %5v state %10s", local.Online, local.State)
 
 			c.mutex.Lock()
@@ -103,8 +103,9 @@ func (c *Handler) confirmIsActive() {
 		//   2) device is offline and no more than one hour has passed.
 		//
 		if local.LastUpdate.Before(refreshDeadline) {
+			log.WithFields(log.Fields{"mac": local.MAC, "ip": local.IP}).Debug("Is device still online? requesting...")
 			if err := c.request(c.config.HostMAC, c.config.HostIP, local.MAC, local.IP); err != nil {
-				log.WithFields(log.Fields{"clientmac": local.MAC, "clientip": local.IP}).Error("Error ARP request: ", err)
+				log.WithFields(log.Fields{"mac": local.MAC, "ip": local.IP}).Error("Error ARP request: ", err)
 			}
 
 			// Give it a chance to update
@@ -112,7 +113,7 @@ func (c *Handler) confirmIsActive() {
 
 			// Set to offline if no updates since the offline deadline
 			if local.Online && local.LastUpdate.Before(offlineDeadline) {
-				log.WithFields(log.Fields{"clientmac": local.MAC, "clientip": local.IP}).Warn("ARP device is offline")
+				log.WithFields(log.Fields{"mac": local.MAC, "ip": local.IP}).Warn("ARP device is offline")
 
 				c.mutex.Lock()
 				table[i].Online = false
@@ -139,7 +140,7 @@ func (c *Handler) scanNetwork() error {
 		// Skip entries that are online; these will be checked somewhere else
 		//
 		if entry := c.FindIP(ip); entry != nil && entry.Online {
-			log.WithFields(log.Fields{"clientmac": entry.MAC, "clientip": entry.IP}).Debug("ARP skip request for online device")
+			log.WithFields(log.Fields{"mac": entry.MAC, "ip": entry.IP}).Debug("ARP skip request for online device")
 			continue
 		}
 
