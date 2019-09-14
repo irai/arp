@@ -189,7 +189,9 @@ func (c *Handler) ListenAndServe(scanInterval time.Duration) {
 	defer h.End()
 
 	// Goroutine to continuosly scan for network devices
-	go c.pollingLoop(scanInterval)
+	if scanInterval > 0 {
+		go c.pollingLoop(scanInterval)
+	}
 
 	// Set ZERO timeout to block forever
 	if err := c.client.SetReadDeadline(time.Time{}); err != nil {

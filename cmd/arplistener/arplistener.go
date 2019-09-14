@@ -55,7 +55,8 @@ func main() {
 	if err != nil {
 		log.Fatal("error connection to websocket server", err)
 	}
-	go c.ListenAndServe(time.Second * 30 * 5)
+	// go c.ListenAndServe(time.Second * 30 * 5)
+	go c.ListenAndServe(0)
 
 	c.Stop()
 
