@@ -7,10 +7,6 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-const (
-	confirmIsActiveFrequency = time.Second * 120
-)
-
 // pollingLoop detect new MACs and also when existing MACs are no longer online.
 // Send ARP request to all 255 IP addresses first time then send ARP request every so many minutes.
 // Probe known macs more often in case they left the network.
@@ -35,7 +31,7 @@ func (c *Handler) pollingLoop(checkNewDevicesInterval time.Duration) (err error)
 
 	// Ticker used to perform full scan
 	checkNewDevices := time.NewTicker(checkNewDevicesInterval).C
-	checkDeviceIsActive := time.NewTicker(confirmIsActiveFrequency).C
+	checkDeviceIsActive := time.NewTicker(time.Second * 30).C // Check every 30 seconds
 	for {
 		// timer for probing known macs
 		select {
@@ -62,11 +58,11 @@ func (c *Handler) confirmIsActive() {
 	c.mutex.Unlock()
 
 	now := time.Now()
-	refreshDeadline := now.Add(confirmIsActiveFrequency * -1)                   // Refresh entries last updated before this time
-	offlineDeadline := now.Add((confirmIsActiveFrequency*2 + time.Minute) * -1) // Mark offline entries last updated before this time
-	deleteDeadline := now.Add(time.Minute * 60 * -1)                            // Delete entries that have not responded in last hour
+	refreshDeadline := now.Add(time.Second * 90 * -1) // Refresh entries last updated before this time
+	offlineDeadline := now.Add(time.Minute * 4 * -1)  // Mark offline entries last updated before this time
+	deleteDeadline := now.Add(time.Minute * 60 * -1)  // Delete entries that have not responded in last hour
 
-	log.Info("ARP refresh online devices")
+	log.Info("ARP scan online devices")
 	for i, e := range table {
 
 		// Ignore empty entries
@@ -103,7 +99,7 @@ func (c *Handler) confirmIsActive() {
 		//   2) device is offline and no more than one hour has passed.
 		//
 		if local.LastUpdate.Before(refreshDeadline) {
-			log.WithFields(log.Fields{"mac": local.MAC, "ip": local.IP}).Debug("Is device still online? requesting...")
+			log.WithFields(log.Fields{"mac": local.MAC, "ip": local.IP}).Debug("Is device online? requesting...")
 			if err := c.request(c.config.HostMAC, c.config.HostIP, local.MAC, local.IP); err != nil {
 				log.WithFields(log.Fields{"mac": local.MAC, "ip": local.IP}).Error("Error ARP request: ", err)
 			}
