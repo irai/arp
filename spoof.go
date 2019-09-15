@@ -108,10 +108,8 @@ func (c *Handler) FakeIPConflict(clientHwAddr net.HardwareAddr, clientIP net.IP)
 // new DHCP entry has been allocated.
 //
 func (c *Handler) IPChanged(clientHwAddr net.HardwareAddr, clientIP net.IP) {
-	client := c.FindMAC(clientHwAddr)
-
 	// Do nothing if we already have this mac and ip
-	if client != nil && client.IP.Equal(clientIP) {
+	if client := c.FindMAC(clientHwAddr); client != nil && client.IP.Equal(clientIP) {
 		return
 	}
 

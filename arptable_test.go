@@ -26,7 +26,8 @@ func Test_AddSimple(t *testing.T) {
 
 func Test_AddMany(t *testing.T) {
 
-	h := &Handler{}
+	h := &Handler{table: make([]*Entry, 0, 256)}
+
 	entry := h.arpTableAppendLocked(StateNormal, mac1, ip1)
 	entry2 := h.arpTableAppendLocked(StateNormal, mac2, ip2)
 	entry3 := h.arpTableAppendLocked(StateNormal, mac3, ip3)
@@ -57,12 +58,12 @@ func Test_AddMany(t *testing.T) {
 }
 func Test_DeleteVirtualMAC(t *testing.T) {
 
-	h := &Handler{}
+	h := &Handler{table: make([]*Entry, 0, 256)}
 	h.arpTableAppendLocked(StateNormal, mac1, ip1)
 	entry2 := h.arpTableAppendLocked(StateVirtualHost, mac2, ip2)
 	h.arpTableAppendLocked(StateNormal, mac3, ip3)
 
-	if len(h.table) != 3 || entry2 != h.FindMAC(mac2) || entry2 != h.FindIP(ip2) {
+	if len(h.table) != 3 || entry2 != h.FindMAC(mac2) || entry2 != h.FindVirtualIP(ip2) {
 		t.Error("expected cannot find entry ", mac2.String(), ip2)
 	}
 	h.deleteVirtualMAC(entry2)
