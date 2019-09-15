@@ -120,7 +120,7 @@ func (c *Handler) IPChanged(clientHwAddr net.HardwareAddr, clientIP net.IP) {
 
 	go func() {
 		for i := 0; i < 5; i++ {
-			time.Sleep(time.Second * 2)
+			time.Sleep(time.Second * 1)
 			if entry := c.FindMAC(clientHwAddr); entry != nil && entry.IP.Equal(clientIP) {
 				log.WithFields(log.Fields{"mac": clientHwAddr, "ip": clientIP}).Info("ARP found mac")
 				return
