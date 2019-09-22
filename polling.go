@@ -113,6 +113,7 @@ func (c *Handler) confirmIsActive() {
 
 				c.mutex.Lock()
 				table[i].Online = false
+				table[i].State = StateNormal // Stop hunt if in progress
 				c.mutex.Unlock()
 
 				// Notify upstream the device changed to offline
