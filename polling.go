@@ -121,6 +121,13 @@ func (c *Handler) confirmIsActive() {
 					c.notification <- *table[i]
 				}
 			}
+		} else {
+			// Notify upstream the device is still online
+			// This will send an update every 30 seconds aprox
+			// Update last seen upstream
+			if table[i].Online && c.notification != nil {
+				c.notification <- *table[i]
+			}
 		}
 	}
 }
