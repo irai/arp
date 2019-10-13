@@ -219,7 +219,18 @@ func (c *Handler) ListenAndServe(scanInterval time.Duration) {
 		sender := c.findMACLocked(packet.SenderHardwareAddr)
 		if sender == nil {
 			// If new client, then create a new entry in table
+			//
 			// NOTE: if this is a probe, the sender IP will be Zeros
+			//       do nothing as the sender IP is not valid yet.
+			//
+			if packet.Operation == marp.OperationRequest && packet.SenderIP.Equal(net.IPv4zero) {
+				c.mutex.Unlock()
+
+				log.WithFields(log.Fields{"mac": sender.MAC, "ip": packet.SenderIP, "targetip": packet.TargetIP}).
+					Info("ARP acd probe received")
+				continue // continue the for loop
+			}
+
 			sender = c.arpTableAppendLocked(StateNormal, packet.SenderHardwareAddr, packet.SenderIP)
 			notify++
 		}
@@ -256,15 +267,6 @@ func (c *Handler) ListenAndServe(scanInterval time.Duration) {
 				log.WithFields(log.Fields{"ip": target.IP, "mac": target.MAC}).Info("ARP sending reply for virtual mac")
 				c.reply(target.MAC, target.IP, EthernetBroadcast, target.IP)
 				break // break the switch
-			}
-
-			// IF ACD probe; do nothing as the sender IP is not valid yet.
-			//
-			if packet.SenderIP.Equal(net.IPv4zero) {
-				c.PrintTable()
-				log.WithFields(log.Fields{"mac": sender.MAC, "ip": packet.SenderIP, "targetip": packet.TargetIP}).
-					Info("ARP acd probe received")
-				continue // continue the for loop
 			}
 
 			switch sender.State {
