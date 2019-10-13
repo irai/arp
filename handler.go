@@ -111,8 +111,7 @@ func (c *Handler) actionUpdateClient(client *Entry, senderMAC net.HardwareAddr, 
 	//
 	if !client.IP.Equal(senderIP) && !senderIP.Equal(net.IPv4zero) &&
 		!bytes.Equal(senderMAC, c.config.RouterMAC) &&
-		!senderIP.Equal(c.config.HostIP) &&
-		!cidr169_254.Contains(senderIP) {
+		!senderIP.Equal(c.config.HostIP) {
 
 		c.mutex.Lock()
 		client.IP = dupIP(senderIP)
@@ -303,7 +302,7 @@ func (c *Handler) ListenAndServe(scanInterval time.Duration) {
 
 		}
 
-		if notify > 0 && c.notification != nil {
+		if notify > 0 && c.notification != nil && !sender.IP.IsLinkLocalUnicast() {
 			c.notification <- *sender
 		}
 	}
