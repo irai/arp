@@ -226,7 +226,7 @@ func (c *Handler) ListenAndServe(scanInterval time.Duration) {
 			if packet.Operation == marp.OperationRequest && packet.SenderIP.Equal(net.IPv4zero) {
 				c.mutex.Unlock()
 
-				log.WithFields(log.Fields{"mac": sender.MAC, "ip": packet.SenderIP, "targetip": packet.TargetIP}).
+				log.WithFields(log.Fields{"sendermac": packet.SenderHardwareAddr, "senderip": packet.SenderIP, "targetip": packet.TargetIP}).
 					Info("ARP acd probe received")
 				continue // continue the for loop
 			}
