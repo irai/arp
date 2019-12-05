@@ -8,19 +8,6 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-var (
-	tmpIP = net.IPv4(10, 10, 10, 0)
-)
-
-func nextFakeIP() net.IP {
-	tmpIP[3]++
-	if tmpIP[3] > 254 {
-		tmpIP[2]++
-		tmpIP[3] = 1
-	}
-	return dupIP(tmpIP)
-}
-
 // ForceIPChange performs the following:
 //  1. set client state to "hunt" which will continuously spoof the client ARP table
 //  2. create a virtual host to claim the reallocated IP
