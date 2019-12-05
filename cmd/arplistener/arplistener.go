@@ -18,14 +18,6 @@ import (
 var (
 	ifaceFlag = flag.String("i", "eth0", "network interface to listen to")
 	defaultGw = flag.String("g", "", "default gateway IPv4 (-g 192.168.1.1)")
-
-/***
-CIDRFlag = flag.String("cidr", "", "CIDR destination to probe with ARP request")
-
-dstIPFlag = flag.String("dip", "", "dst IP for reply packet i.e -sip 192.168.0.10. ARP poisoning")
-
-dstMACFlag = flag.String("dmac", "", "dst MAC for reply packet i.e -mac 6e:a7:e6:d6:f9:a4 . ARP poisoning")
-**/
 )
 
 func main() {
