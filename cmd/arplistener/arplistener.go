@@ -23,12 +23,12 @@ var (
 func main() {
 	flag.Parse()
 
-	SetLogLevel("info")
+	setLogLevel("info")
 
 	NIC := *ifaceFlag
 
 	var err error
-	HostIP, HostMAC, err := NICGetInformation(NIC)
+	HostIP, HostMAC, err := getNICInfo(NIC)
 	if err != nil {
 		log.Fatal("error cannot get host ip and mac ", err)
 	}
@@ -98,14 +98,14 @@ func cmd(c *arp.Handler) {
 			if len(text) < 3 {
 				text = text + "   "
 			}
-			err := SetLogLevel(text[2:])
+			err := setLogLevel(text[2:])
 			if err != nil {
 				log.Error("invalid level. valid levels (error, warn, info, debug) ", err)
 				break
 			}
 		case 'l':
 			l := log.GetLevel()
-			SetLogLevel("info") // quick hack to print table
+			setLogLevel("info") // quick hack to print table
 			c.PrintTable()
 			log.SetLevel(l)
 		case 'f':
@@ -140,7 +140,7 @@ func getMAC(c *arp.Handler, text string) *arp.Entry {
 	return entry
 }
 
-func NICGetInformation(nic string) (ip net.IP, mac net.HardwareAddr, err error) {
+func getNICInfo(nic string) (ip net.IP, mac net.HardwareAddr, err error) {
 
 	all, err := net.Interfaces()
 	for _, v := range all {
@@ -182,7 +182,7 @@ func NICGetInformation(nic string) (ip net.IP, mac net.HardwareAddr, err error) 
 	return ip, mac, err
 }
 
-func SetLogLevel(level string) (err error) {
+func setLogLevel(level string) (err error) {
 
 	if level != "" {
 		l, err := log.ParseLevel(level)
