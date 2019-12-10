@@ -120,7 +120,7 @@ func (c *Handler) arpTableAppendLocked(state arpState, clientMAC net.HardwareAdd
 
 	log.WithFields(log.Fields{"ip": ip.String(), "mac": mac.String()}).Warn("ARP new mac detected")
 
-	entry := &Entry{State: state, MAC: mac, IP: ip.To4(), LastUpdate: time.Now(), Online: true}
+	entry := &Entry{State: state, MAC: mac, IP: ip.To4(), LastUpdate: time.Now(), Online: false}
 
 	// Attempt to reuse deleted entry if available
 	for i := range c.table {
@@ -135,7 +135,7 @@ func (c *Handler) arpTableAppendLocked(state arpState, clientMAC net.HardwareAdd
 	// This will cause a buffer rellocation and likely result in pointer errors in
 	// other goroutines.
 	if len(c.table) >= cap(c.table) {
-		log.Error("arptable is too big", len(c.table), cap(c.table))
+		log.Error("ARP arptable is too big", len(c.table), cap(c.table))
 		return nil
 	}
 
@@ -144,7 +144,7 @@ func (c *Handler) arpTableAppendLocked(state arpState, clientMAC net.HardwareAdd
 	if len(table) > 0 && &c.table[0] != &table[0] {
 		// tell the world if the underlaying array changed.
 		// the logic assume existing pointers will not change
-		log.Error("ERROR new table array allocated", len(c.table), cap(c.table))
+		log.Error("ARP ERROR new table array allocated", len(c.table), cap(c.table))
 	}
 
 	return entry

@@ -139,6 +139,7 @@ func (c *Handler) spoofLoop(client *Entry) {
 	// Virtual Host will exist while this goroutine is running
 	c.mutex.Lock()
 	virtual := c.arpTableAppendLocked(StateVirtualHost, newVirtualHardwareAddr(), client.IP)
+	virtual.Online = true
 	c.mutex.Unlock()
 
 	// Always search for MAC in case it has been deleted.
