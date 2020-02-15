@@ -163,7 +163,7 @@ func (c *Handler) spoofLoop(client *Entry) {
 	nTimes := 0
 	startTime := time.Now()
 
-	log.WithFields(log.Fields{"mac": mac.String(), "ip": virtual.IP}).Infof("ARP claim IP star %v", startTime)
+	log.WithFields(log.Fields{"mac": mac.String(), "ip": virtual.IP}).Infof("ARP claim IP start %v", startTime)
 
 	defer func() {
 		log.WithFields(log.Fields{"mac": mac.String(), "ip": virtual.IP}).Infof("ARP claim IP end repeat=%v duration=%v", nTimes, time.Now().Sub(startTime))
