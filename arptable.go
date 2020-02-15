@@ -118,7 +118,9 @@ func (c *Handler) arpTableAppendLocked(state arpState, clientMAC net.HardwareAdd
 	mac := dupMAC(clientMAC) // copy the underlying slice
 	ip := dupIP(clientIP)    // copy the underlysing slice
 
-	log.WithFields(log.Fields{"ip": ip.String(), "mac": mac.String()}).Warn("ARP new mac detected")
+	if LogAll {
+		log.WithFields(log.Fields{"ip": ip.String(), "mac": mac.String()}).Debug("ARP new mac detected")
+	}
 
 	entry := &Entry{State: state, MAC: mac, IP: ip.To4(), LastUpdate: time.Now(), Online: false}
 
@@ -156,7 +158,9 @@ func (c *Handler) deleteVirtualMAC(virtual *Entry) {
 
 	for i := range c.table {
 		if c.table[i] != nil && bytes.Equal(c.table[i].MAC, virtual.MAC) && c.table[i].State == StateVirtualHost {
-			log.WithFields(log.Fields{"ip": c.table[i].IP, "mac": c.table[i].MAC.String()}).Info("ARP deleting virtual mac")
+			if LogAll {
+				log.WithFields(log.Fields{"ip": c.table[i].IP, "mac": c.table[i].MAC.String()}).Debug("ARP deleting virtual mac")
+			}
 			c.table[i] = nil
 			c.PrintTable()
 			return

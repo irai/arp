@@ -48,11 +48,14 @@ func (c *Handler) request(srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr ne
 // +============+===+===========+===========+============+============+===================+===========+
 //
 func (c *Handler) Request(srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr net.HardwareAddr, dstIP net.IP) error {
-	if srcIP.Equal(dstIP) {
-		log.WithFields(log.Fields{"srcmac": srcHwAddr, "srcip": srcIP, "dstmac": dstHwAddr, "dstip": dstIP}).Infof("ARP send announcement - I am %s", dstIP)
-	} else {
-		log.WithFields(log.Fields{"srcmac": srcHwAddr, "srcip": srcIP, "dstmac": dstHwAddr, "dstip": dstIP}).Infof("ARP send request - who is %s", dstIP)
+	if LogAll {
+		if srcIP.Equal(dstIP) {
+			log.WithFields(log.Fields{"srcmac": srcHwAddr, "srcip": srcIP, "dstmac": dstHwAddr, "dstip": dstIP}).Debugf("ARP send announcement - I am %s", dstIP)
+		} else {
+			log.WithFields(log.Fields{"srcmac": srcHwAddr, "srcip": srcIP, "dstmac": dstHwAddr, "dstip": dstIP}).Debugf("ARP send request - who is %s", dstIP)
+		}
 	}
+
 	return c.request(srcHwAddr, srcIP, dstHwAddr, dstIP)
 }
 
@@ -60,7 +63,9 @@ func (c *Handler) Request(srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr ne
 //
 // Call with dstHwAddr = ethernet.Broadcast to reply to all
 func (c *Handler) Reply(srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr net.HardwareAddr, dstIP net.IP) error {
-	log.WithFields(log.Fields{"dstmac": dstHwAddr.String(), "dstip": dstIP.String()}).Warnf("ARP send reply - host %s is at %s", srcIP.String(), srcHwAddr.String())
+	if LogAll {
+		log.WithFields(log.Fields{"dstmac": dstHwAddr.String(), "dstip": dstIP.String()}).Debugf("ARP send reply - host %s is at %s", srcIP.String(), srcHwAddr.String())
+	}
 	return c.reply(srcHwAddr, srcIP, dstHwAddr, dstIP)
 }
 

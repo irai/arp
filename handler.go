@@ -32,6 +32,11 @@ type Handler struct {
 }
 
 var (
+	// LogAll controls the level of logging required. By default we only log
+	// error and warning.
+	// Set LogAll to true to see all logs.
+	LogAll bool
+
 	cidr169_254 = net.IPNet{IP: net.IPv4(169, 254, 0, 0), Mask: net.IPv4Mask(255, 255, 0, 0)}
 )
 
@@ -70,8 +75,10 @@ func NewHandler(nic string, hostMAC net.HardwareAddr, hostIP net.IP, routerIP ne
 	c.config.RouterIP = routerIP
 	c.config.HomeLAN = homeLAN
 
-	log.WithFields(log.Fields{"hostinterface": c.config.NIC, "hostmac": c.config.HostMAC.String(),
-		"hostip": c.config.HostIP.String(), "lanrouter": c.config.RouterIP.String()}).Info("ARP configuration")
+	if LogAll {
+		log.WithFields(log.Fields{"hostinterface": c.config.NIC, "hostmac": c.config.HostMAC.String(),
+			"hostip": c.config.HostIP.String(), "lanrouter": c.config.RouterIP.String()}).Debug("ARP configuration")
+	}
 
 	return c, nil
 }
@@ -118,7 +125,9 @@ func (c *Handler) actionUpdateClient(client *Entry, senderMAC net.HardwareAddr, 
 		client.State = StateNormal
 		c.mutex.Unlock()
 
-		log.WithFields(log.Fields{"mac": client.MAC.String(), "ip": client.IP.String()}).Infof("ARP client changed IP to %s", senderIP)
+		if LogAll {
+			log.WithFields(log.Fields{"mac": client.MAC.String(), "ip": client.IP.String()}).Debugf("ARP client changed IP to %s", senderIP)
+		}
 
 		return 1
 	}
@@ -143,7 +152,9 @@ func (c *Handler) actionRequestInHuntState(client *Entry, senderIP net.IP, targe
 		return 0, nil
 	}
 
-	log.WithFields(log.Fields{"mac": client.MAC, "ip": ip}).Debugf("ARP client announcement in hunt state %s", targetIP)
+	if LogAll {
+		log.WithFields(log.Fields{"mac": client.MAC, "ip": ip}).Debugf("ARP client announcement in hunt state %s", targetIP)
+	}
 
 	// Record new IP in ARP table if address has changed.
 	// Stop hunting it. The spoof function will detect the mac changed to normal
@@ -152,14 +163,18 @@ func (c *Handler) actionRequestInHuntState(client *Entry, senderIP net.IP, targe
 	if !ip.Equal(targetIP) { // is this a new IP?
 		n := c.actionUpdateClient(client, client.MAC, targetIP)
 		if n != 1 {
-			log.WithFields(log.Fields{"mac": client.MAC.String(), "ip": ip}).Warnf("ARP client failed to change IP to %s", targetIP)
+			if LogAll {
+				log.WithFields(log.Fields{"mac": client.MAC.String(), "ip": ip}).Debugf("ARP client failed to change IP to %s", targetIP)
+			}
 			return 0, fmt.Errorf("error updating client: %s, %s ", client.MAC.String(), ip)
 		}
 
 		return n, nil
 	}
 
-	log.WithFields(log.Fields{"mac": client.MAC, "ip": ip}).Warnf("ARP client attempting to get same IP %s", targetIP)
+	if LogAll {
+		log.WithFields(log.Fields{"mac": client.MAC, "ip": ip}).Debugf("ARP client attempting to get same IP %s", targetIP)
+	}
 
 	return 0, err
 }
@@ -205,7 +220,9 @@ func (c *Handler) ListenAndServe(scanInterval time.Duration) {
 		if err != nil {
 			log.Error("ARP read error ", err)
 			if err1, ok := err.(net.Error); ok && err1.Temporary() {
-				log.Info("ARP read error is temporary - retry", err1)
+				if LogAll {
+					log.Debug("ARP read error is temporary - retry", err1)
+				}
 				time.Sleep(time.Millisecond * 30) // Wait a few seconds before retrying
 				continue
 			}
@@ -226,8 +243,10 @@ func (c *Handler) ListenAndServe(scanInterval time.Duration) {
 			if packet.Operation == marp.OperationRequest && packet.SenderIP.Equal(net.IPv4zero) {
 				c.mutex.Unlock()
 
-				log.WithFields(log.Fields{"sendermac": packet.SenderHardwareAddr, "senderip": packet.SenderIP, "targetip": packet.TargetIP}).
-					Info("ARP acd probe received")
+				if LogAll {
+					log.WithFields(log.Fields{"sendermac": packet.SenderHardwareAddr, "senderip": packet.SenderIP, "targetip": packet.TargetIP}).
+						Debug("ARP acd probe received")
+				}
 				continue // continue the for loop
 			}
 
@@ -247,7 +266,7 @@ func (c *Handler) ListenAndServe(scanInterval time.Duration) {
 		if sender.Online == false {
 			sender.Online = true
 			notify++
-			log.WithFields(log.Fields{"mac": sender.MAC, "ip": packet.SenderIP, "previousip": sender.IP}).Warn("ARP device is online")
+			log.WithFields(log.Fields{"mac": sender.MAC, "ip": packet.SenderIP, "previousip": sender.IP}).Info("ARP device is online")
 		}
 
 		switch packet.Operation {
@@ -255,16 +274,20 @@ func (c *Handler) ListenAndServe(scanInterval time.Duration) {
 		// Reply to ARP request if we are spoofing this host.
 		//
 		case marp.OperationRequest:
-			if packet.SenderIP.Equal(packet.TargetIP) {
-				log.WithFields(log.Fields{"mac": sender.MAC, "ip": packet.SenderIP}).Info("ARP announcement received")
-			} else {
-				log.WithFields(log.Fields{"ip": sender.IP, "mac": sender.MAC,
-					"to_ip": packet.TargetIP.String(), "to_mac": packet.TargetHardwareAddr}).Debugf("ARP request received - who is %s tell %s", packet.TargetIP.String(), sender.IP)
+			if LogAll {
+				if packet.SenderIP.Equal(packet.TargetIP) {
+					log.WithFields(log.Fields{"mac": sender.MAC, "ip": packet.SenderIP}).Debug("ARP announcement received")
+				} else {
+					log.WithFields(log.Fields{"ip": sender.IP, "mac": sender.MAC,
+						"to_ip": packet.TargetIP.String(), "to_mac": packet.TargetHardwareAddr}).Debugf("ARP request received - who is %s tell %s", packet.TargetIP.String(), sender.IP)
+				}
 			}
 
 			// if target is virtual host, reply and return
 			if target := c.FindVirtualIP(packet.TargetIP); target != nil {
-				log.WithFields(log.Fields{"ip": target.IP, "mac": target.MAC}).Info("ARP sending reply for virtual mac")
+				if LogAll {
+					log.WithFields(log.Fields{"ip": target.IP, "mac": target.MAC}).Debug("ARP sending reply for virtual mac")
+				}
 				c.reply(target.MAC, target.IP, EthernetBroadcast, target.IP)
 				break // break the switch
 			}
@@ -282,10 +305,12 @@ func (c *Handler) ListenAndServe(scanInterval time.Duration) {
 			}
 
 		case marp.OperationReply:
-			log.WithFields(log.Fields{
-				"ip": sender.IP, "mac": sender.MAC,
-				"senderip": packet.SenderIP.String(), "to_mac": packet.TargetHardwareAddr, "to_ip": packet.TargetIP}).
-				Infof("ARP reply received - %s is at %s", packet.SenderIP, sender.MAC)
+			if LogAll {
+				log.WithFields(log.Fields{
+					"ip": sender.IP, "mac": sender.MAC,
+					"senderip": packet.SenderIP.String(), "to_mac": packet.TargetHardwareAddr, "to_ip": packet.TargetIP}).
+					Debugf("ARP reply received - %s is at %s", packet.SenderIP, sender.MAC)
+			}
 
 			switch sender.State {
 			case StateNormal:

@@ -62,7 +62,9 @@ func (c *Handler) confirmIsActive() {
 	offlineDeadline := now.Add(time.Minute * 4 * -1)  // Mark offline entries last updated before this time
 	deleteDeadline := now.Add(time.Minute * 60 * -1)  // Delete entries that have not responded in last hour
 
-	log.Info("ARP scan online devices")
+	if LogAll {
+		log.Debug("ARP scan online devices")
+	}
 	for i, e := range table {
 
 		// Ignore empty entries
@@ -85,8 +87,10 @@ func (c *Handler) confirmIsActive() {
 			if local.Online == true {
 				log.Warn("ARP device is not offline during delete", local.MAC)
 			}
-			log.WithFields(log.Fields{"mac": local.MAC, "ip": local.IP}).
-				Infof("ARP delete entry online %5v state %10s", local.Online, local.State)
+			if LogAll {
+				log.WithFields(log.Fields{"mac": local.MAC, "ip": local.IP}).
+					Infof("ARP delete entry online %5v state %10s", local.Online, local.State)
+			}
 
 			c.mutex.Lock()
 			table[i] = nil // use the index to set the array to nil
@@ -99,7 +103,9 @@ func (c *Handler) confirmIsActive() {
 		//   2) device is offline and no more than one hour has passed.
 		//
 		if local.LastUpdate.Before(refreshDeadline) {
-			log.WithFields(log.Fields{"mac": local.MAC, "ip": local.IP}).Debug("Is device online? requesting...")
+			if LogAll {
+				log.WithFields(log.Fields{"mac": local.MAC, "ip": local.IP}).Debug("Is device online? requesting...")
+			}
 			if err := c.request(c.config.HostMAC, c.config.HostIP, local.MAC, local.IP); err != nil {
 				log.WithFields(log.Fields{"mac": local.MAC, "ip": local.IP}).Error("Error ARP request: ", err)
 			}
@@ -109,7 +115,7 @@ func (c *Handler) confirmIsActive() {
 
 			// Set to offline if no updates since the offline deadline
 			if local.Online && local.LastUpdate.Before(offlineDeadline) {
-				log.WithFields(log.Fields{"mac": local.MAC, "ip": local.IP}).Warn("ARP device is offline")
+				log.WithFields(log.Fields{"mac": local.MAC, "ip": local.IP}).Info("ARP device is offline")
 
 				c.mutex.Lock()
 				table[i].Online = false
@@ -137,14 +143,18 @@ func (c *Handler) scanNetwork() error {
 	// Copy underneath array so we can modify value.
 	ip := dupIP(c.config.HomeLAN.IP)
 
-	log.Info("ARP Discovering IP - sending 254 ARP requests")
+	if LogAll {
+		log.Debug("ARP Discovering IP - sending 254 ARP requests")
+	}
 	for host := 1; host < 255; host++ {
 		ip[3] = byte(host)
 
 		// Skip entries that are online; these will be checked somewhere else
 		//
 		if entry := c.FindIP(ip); entry != nil && entry.Online {
-			log.WithFields(log.Fields{"mac": entry.MAC, "ip": entry.IP}).Debug("ARP skip request for online device")
+			if LogAll {
+				log.WithFields(log.Fields{"mac": entry.MAC, "ip": entry.IP}).Debug("ARP skip request for online device")
+			}
 			continue
 		}
 
@@ -155,7 +165,9 @@ func (c *Handler) scanNetwork() error {
 		if err != nil {
 			log.Error("ARP request error ", err)
 			if err1, ok := err.(net.Error); ok && err1.Temporary() {
-				log.Info("ARP error in read socket is temporary - retry", err1)
+				if LogAll {
+					log.Debug("ARP error in read socket is temporary - retry", err1)
+				}
 				time.Sleep(time.Millisecond * 100) // Wait before retrying
 				continue
 			}

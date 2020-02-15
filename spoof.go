@@ -16,18 +16,24 @@ import (
 //
 // client will revert back to "normal" when a new IP is detected for the MAC
 func (c *Handler) ForceIPChange(clientHwAddr net.HardwareAddr, clientIP net.IP) error {
-	log.WithFields(log.Fields{"mac": clientHwAddr.String(), "ip": clientIP.String()}).Warn("ARP capture force IP change")
+	if LogAll {
+		log.WithFields(log.Fields{"mac": clientHwAddr.String(), "ip": clientIP.String()}).Debug("ARP capture force IP change")
+	}
 
 	client := c.FindMAC(clientHwAddr)
 	if client == nil {
 		err := fmt.Errorf("mac %s is not online", clientHwAddr.String())
-		log.Warn("ARP nothing to do - ", err)
+		if LogAll {
+			log.Debug("ARP nothing to do - ", err)
+		}
 		return err
 	}
 
 	if client.State == StateHunt {
 		err := fmt.Errorf("client already in hunt state %s ", client.IP.String())
-		log.Error("ARP error in ForceIPChange", err)
+		if LogAll {
+			log.Debug("ARP error in ForceIPChange", err)
+		}
 		return err
 	}
 
@@ -50,7 +56,9 @@ func (c *Handler) ForceIPChange(clientHwAddr net.HardwareAddr, clientIP net.IP) 
 
 // StopIPChange terminate the hunting process
 func (c *Handler) StopIPChange(clientHwAddr net.HardwareAddr) (err error) {
-	log.WithFields(log.Fields{"mac": clientHwAddr.String()}).Info("ARP stop IP change")
+	if LogAll {
+		log.WithFields(log.Fields{"mac": clientHwAddr.String()}).Debug("ARP stop IP change")
+	}
 
 	client := c.FindMAC(clientHwAddr)
 	if client == nil {
@@ -60,7 +68,9 @@ func (c *Handler) StopIPChange(clientHwAddr net.HardwareAddr) (err error) {
 	}
 
 	if client.State != StateHunt {
-		log.WithFields(log.Fields{"mac": client.MAC.String(), "ip": client.IP}).Warn("ARP client is not in hunt state", client.State)
+		if LogAll {
+			log.WithFields(log.Fields{"mac": client.MAC.String(), "ip": client.IP}).Debug("ARP client is not in hunt state", client.State)
+		}
 	}
 
 	// this will terminate the spoof gorotutine and delete the Virtual MAC
@@ -72,7 +82,9 @@ func (c *Handler) StopIPChange(clientHwAddr net.HardwareAddr) (err error) {
 // It is used to get the initial client name.
 //
 func (c *Handler) FakeIPConflict(clientHwAddr net.HardwareAddr, clientIP net.IP) {
-	log.WithFields(log.Fields{"mac": clientHwAddr.String(), "ip": clientIP.String()}).Warn("ARP fake IP conflict")
+	if LogAll {
+		log.WithFields(log.Fields{"mac": clientHwAddr.String(), "ip": clientIP.String()}).Debug("ARP fake IP conflict")
+	}
 
 	go func() {
 
@@ -100,7 +112,9 @@ func (c *Handler) IPChanged(clientHwAddr net.HardwareAddr, clientIP net.IP) {
 		return
 	}
 
-	log.WithFields(log.Fields{"mac": clientHwAddr, "ip": clientIP}).Info("ARP new mac or ip - validating")
+	if LogAll {
+		log.WithFields(log.Fields{"mac": clientHwAddr, "ip": clientIP}).Debug("ARP new mac or ip - validating")
+	}
 	if err := c.Request(c.config.HostMAC, c.config.HostIP, EthernetBroadcast, clientIP); err != nil {
 		log.WithFields(log.Fields{"mac": clientHwAddr, "ip": clientIP}).Error("ARP request failed", err)
 	}
@@ -109,7 +123,9 @@ func (c *Handler) IPChanged(clientHwAddr net.HardwareAddr, clientIP net.IP) {
 		for i := 0; i < 5; i++ {
 			time.Sleep(time.Second * 1)
 			if entry := c.FindMAC(clientHwAddr); entry != nil && entry.IP.Equal(clientIP) {
-				log.WithFields(log.Fields{"mac": clientHwAddr, "ip": clientIP}).Info("ARP found mac")
+				if LogAll {
+					log.WithFields(log.Fields{"mac": clientHwAddr, "ip": clientIP}).Debug("ARP found mac")
+				}
 				return
 			}
 
@@ -144,6 +160,15 @@ func (c *Handler) spoofLoop(client *Entry) {
 
 	// Always search for MAC in case it has been deleted.
 	mac := client.MAC
+	nTimes := 0
+	startTime := time.Now()
+
+	log.WithFields(log.Fields{"mac": mac.String(), "ip": virtual.IP}).Infof("ARP claim IP star %v", startTime)
+
+	defer func() {
+		log.WithFields(log.Fields{"mac": mac.String(), "ip": virtual.IP}).Infof("ARP claim IP end repeat=%v duration=%v", nTimes, time.Now().Sub(startTime))
+	}()
+
 	for {
 		client = c.FindMAC(mac)
 		if h.Stopping() == true || client == nil || client.State != StateHunt {
@@ -151,7 +176,10 @@ func (c *Handler) spoofLoop(client *Entry) {
 			return
 		}
 
-		log.WithFields(log.Fields{"mac": mac.String(), "ip": virtual.IP}).Warn("ARP claiming IP")
+		if nTimes%16 == 0 {
+			log.WithFields(log.Fields{"mac": mac.String(), "ip": virtual.IP}).Infof("ARP claim IP repeat=%v duration=%v", nTimes, time.Now().Sub(startTime))
+		}
+		nTimes++
 
 		// Re-arp target to change router to host so all traffic comes to us
 		// i.e. tell target I am 192.168.0.1
