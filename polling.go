@@ -67,8 +67,8 @@ func (c *Handler) confirmIsActive() {
 	}
 	for i, e := range table {
 
-		// Ignore empty entries
-		if e == nil {
+		// Ignore empty entries and link local
+		if e == nil || e.IP.IsLinkLocalUnicast() {
 			continue
 		}
 
@@ -124,7 +124,7 @@ func (c *Handler) confirmIsActive() {
 
 				// Notify upstream the device changed to offline
 				// use local to avoid race
-				if c.notification != nil && !local.IP.IsLinkLocalUnicast() {
+				if c.notification != nil {
 					local.Online = false
 					local.State = StateNormal
 					c.notification <- *local
@@ -134,7 +134,7 @@ func (c *Handler) confirmIsActive() {
 			// Notify upstream the device is still online
 			// This will send an update every 30 seconds aprox
 			// Update last seen upstream
-			if table[i].Online && c.notification != nil && !local.IP.IsLinkLocalUnicast() {
+			if table[i].Online && c.notification != nil {
 				c.notification <- *local
 			}
 		}

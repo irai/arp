@@ -229,6 +229,15 @@ func (c *Handler) ListenAndServe(scanInterval time.Duration) {
 
 		notify := 0
 
+		// skip link local packets
+		if packet.SenderIP.IsLinkLocalUnicast() ||
+			packet.TargetIP.IsLinkLocalUnicast() {
+			if LogAll {
+				log.WithFields(log.Fields{"senderip": packet.SenderIP, "targetip": packet.TargetIP}).Debug("ARP skipping link local packet")
+			}
+			continue
+		}
+
 		c.mutex.Lock()
 
 		sender := c.findMACLocked(packet.SenderHardwareAddr)
@@ -251,6 +260,7 @@ func (c *Handler) ListenAndServe(scanInterval time.Duration) {
 			sender = c.arpTableAppendLocked(StateNormal, packet.SenderHardwareAddr, packet.SenderIP)
 			notify++
 		}
+		previousIP := sender.IP
 
 		// Skip packets that we sent as virtual host (i.e. we sent these)
 		if sender.State == StateVirtualHost {
@@ -321,14 +331,17 @@ func (c *Handler) ListenAndServe(scanInterval time.Duration) {
 
 		}
 
-		if sender.Online == false && !sender.IP.IsUnspecified() {
-			sender.Online = true
-			notify++
-			log.WithFields(log.Fields{"mac": sender.MAC, "ip": packet.SenderIP, "previousip": sender.IP}).Info("ARP device is online")
-		}
+		if notify > 0 {
+			if sender.Online == false {
+				sender.Online = true
+				log.WithFields(log.Fields{"mac": sender.MAC, "ip": sender.IP, "previousip": previousIP}).Info("ARP device is online")
+			} else {
+				log.WithFields(log.Fields{"mac": sender.MAC, "ip": sender.IP, "previousip": previousIP}).Info("ARP device changed IP")
+			}
 
-		if notify > 0 && c.notification != nil && !sender.IP.IsLinkLocalUnicast() {
-			c.notification <- *sender
+			if c.notification != nil {
+				c.notification <- *sender
+			}
 		}
 	}
 }
