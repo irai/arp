@@ -261,7 +261,7 @@ func (c *Handler) ListenAndServe(scanInterval time.Duration) {
 
 		c.mutex.Unlock()
 
-		if sender.Online == false {
+		if sender.Online == false && !packet.SenderIP.IsUnspecified() {
 			sender.Online = true
 			notify++
 			log.WithFields(log.Fields{"mac": sender.MAC, "ip": packet.SenderIP, "previousip": sender.IP}).Info("ARP device is online")
