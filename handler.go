@@ -36,8 +36,6 @@ var (
 	// error and warning.
 	// Set LogAll to true to see all logs.
 	LogAll bool
-
-	cidr169_254 = net.IPNet{IP: net.IPv4(169, 254, 0, 0), Mask: net.IPv4Mask(255, 255, 0, 0)}
 )
 
 func getArpClient(nic string) (*marp.Client, error) {
