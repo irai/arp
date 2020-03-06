@@ -261,12 +261,6 @@ func (c *Handler) ListenAndServe(scanInterval time.Duration) {
 
 		c.mutex.Unlock()
 
-		if sender.Online == false && !packet.SenderIP.IsUnspecified() {
-			sender.Online = true
-			notify++
-			log.WithFields(log.Fields{"mac": sender.MAC, "ip": packet.SenderIP, "previousip": sender.IP}).Info("ARP device is online")
-		}
-
 		switch packet.Operation {
 
 		// Reply to ARP request if we are spoofing this host.
@@ -325,6 +319,12 @@ func (c *Handler) ListenAndServe(scanInterval time.Duration) {
 				log.WithFields(log.Fields{"ip": sender.IP, "mac": sender.MAC}).Error("ARP unexpected client state in reply =", sender.State)
 			}
 
+		}
+
+		if sender.Online == false && !sender.IP.IsUnspecified() {
+			sender.Online = true
+			notify++
+			log.WithFields(log.Fields{"mac": sender.MAC, "ip": packet.SenderIP, "previousip": sender.IP}).Info("ARP device is online")
 		}
 
 		if notify > 0 && c.notification != nil && !sender.IP.IsLinkLocalUnicast() {
