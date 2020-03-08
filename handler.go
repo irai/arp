@@ -112,24 +112,27 @@ func (c *Handler) Stop() error {
 
 func (c *Handler) actionUpdateClient(client *Entry, senderMAC net.HardwareAddr, senderIP net.IP) int {
 	// Update IP if client changed
-	// Ignore router updates: our router broadcast 169.254.x.x local link IP.
 	//
-	if !client.IP.Equal(senderIP) && !senderIP.Equal(net.IPv4zero) &&
-		!bytes.Equal(senderMAC, c.config.RouterMAC) &&
+	// Ignore if same IP and client is Online
+	// Ignore any router updates
+	//
+	if (client.IP.Equal(senderIP) && client.Online) ||
+		senderIP.Equal(net.IPv4zero) ||
+		bytes.Equal(senderMAC, c.config.RouterMAC) ||
 		!senderIP.Equal(c.config.HostIP) {
-
-		c.mutex.Lock()
-		client.IP = dupIP(senderIP)
-		client.State = StateNormal
-		c.mutex.Unlock()
-
-		if LogAll {
-			log.WithFields(log.Fields{"mac": client.MAC.String(), "ip": client.IP.String()}).Debugf("ARP client changed IP to %s", senderIP)
-		}
-
-		return 1
+		return 0
 	}
-	return 0
+
+	c.mutex.Lock()
+	client.IP = dupIP(senderIP)
+	client.State = StateNormal
+	c.mutex.Unlock()
+
+	if LogAll {
+		log.WithFields(log.Fields{"mac": client.MAC.String(), "ip": client.IP.String()}).Debugf("ARP client updated IP to %s", senderIP)
+	}
+
+	return 1
 }
 
 // actionRequestInHuntState respond to a request from a device that is in Hunt state.
