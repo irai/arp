@@ -108,7 +108,7 @@ func (c *Handler) FakeIPConflict(clientHwAddr net.HardwareAddr, clientIP net.IP)
 //
 func (c *Handler) IPChanged(clientHwAddr net.HardwareAddr, clientIP net.IP) {
 	// Do nothing if we already have this mac and ip
-	if client := c.FindMAC(clientHwAddr); client != nil && client.IP.Equal(clientIP) {
+	if client := c.FindMAC(clientHwAddr); client != nil && client.IP.Equal(clientIP) && client.Online {
 		return
 	}
 
