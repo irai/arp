@@ -119,7 +119,7 @@ func (c *Handler) actionUpdateClient(client *Entry, senderMAC net.HardwareAddr, 
 	if (client.IP.Equal(senderIP) && client.Online) ||
 		senderIP.Equal(net.IPv4zero) ||
 		bytes.Equal(senderMAC, c.config.RouterMAC) ||
-		!senderIP.Equal(c.config.HostIP) {
+		senderIP.Equal(c.config.HostIP) {
 		return 0
 	}
 
@@ -281,9 +281,9 @@ func (c *Handler) ListenAndServe(scanInterval time.Duration) {
 		case marp.OperationRequest:
 			if LogAll {
 				if packet.SenderIP.Equal(packet.TargetIP) {
-					log.WithFields(log.Fields{"mac": sender.MAC, "ip": packet.SenderIP}).Debug("ARP announcement received")
+					log.WithFields(log.Fields{"mac": sender.MAC, "ip": packet.SenderIP, "state": sender.State}).Debug("ARP announcement received")
 				} else {
-					log.WithFields(log.Fields{"ip": sender.IP, "mac": sender.MAC,
+					log.WithFields(log.Fields{"ip": sender.IP, "mac": sender.MAC, "state": sender.State,
 						"to_ip": packet.TargetIP.String(), "to_mac": packet.TargetHardwareAddr}).Debugf("ARP request received - who is %s tell %s", packet.TargetIP.String(), sender.IP)
 				}
 			}
@@ -312,7 +312,7 @@ func (c *Handler) ListenAndServe(scanInterval time.Duration) {
 		case marp.OperationReply:
 			if LogAll {
 				log.WithFields(log.Fields{
-					"ip": sender.IP, "mac": sender.MAC,
+					"ip": sender.IP, "mac": sender.MAC, "state": sender.State,
 					"senderip": packet.SenderIP.String(), "to_mac": packet.TargetHardwareAddr, "to_ip": packet.TargetIP}).
 					Debugf("ARP reply received - %s is at %s", packet.SenderIP, sender.MAC)
 			}
