@@ -23,7 +23,7 @@ func (c *Handler) request(srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr ne
 	}
 
 	if err := c.client.SetWriteDeadline(time.Now().Add(writeTimeout)); err != nil {
-		log.Error(err)
+		return err
 	}
 
 	return c.client.WriteTo(arp, EthernetBroadcast)
@@ -76,7 +76,7 @@ func (c *Handler) reply(srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr net.
 	}
 
 	if err := c.client.SetWriteDeadline(time.Now().Add(writeTimeout)); err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	return c.client.WriteTo(p, dstHwAddr)
