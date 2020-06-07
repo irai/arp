@@ -165,14 +165,15 @@ func (c *Handler) spoofLoop(client *Entry) {
 
 	log.WithFields(log.Fields{"mac": mac.String(), "ip": virtual.IP}).Infof("ARP claim IP start %v", startTime)
 
-	defer func() {
-		log.WithFields(log.Fields{"mac": mac.String(), "ip": virtual.IP}).Infof("ARP claim IP end repeat=%v duration=%v", nTimes, time.Now().Sub(startTime))
-	}()
-
 	for {
 		client = c.FindMAC(mac)
 		if h.Stopping() == true || client == nil || client.State != StateHunt {
 			c.deleteVirtualMAC(virtual)
+			newIP := net.IPv4zero
+			if client != nil {
+				newIP = client.IP
+			}
+			log.WithFields(log.Fields{"mac": mac.String(), "ip": virtual.IP, "newIP": newIP}).Infof("ARP claim IP end repeat=%v duration=%v", nTimes, time.Now().Sub(startTime))
 			return
 		}
 
