@@ -337,9 +337,9 @@ func (c *Handler) ListenAndServe(scanInterval time.Duration) {
 		if notify > 0 {
 			if sender.Online == false {
 				sender.Online = true
-				log.WithFields(log.Fields{"mac": sender.MAC, "ip": sender.IP, "previousip": previousIP}).Info("ARP device is online")
+				log.WithFields(log.Fields{"mac": sender.MAC, "ip": sender.IP, "previousip": previousIP, "state": sender.State}).Info("ARP device is online")
 			} else {
-				log.WithFields(log.Fields{"mac": sender.MAC, "ip": sender.IP, "previousip": previousIP}).Info("ARP device changed IP")
+				log.WithFields(log.Fields{"mac": sender.MAC, "ip": sender.IP, "previousip": previousIP, "state": sender.State}).Info("ARP device changed IP")
 			}
 
 			if c.notification != nil {
