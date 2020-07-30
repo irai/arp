@@ -134,7 +134,7 @@ func (c *Handler) IPChanged(clientHwAddr net.HardwareAddr, clientIP net.IP) {
 				log.WithFields(log.Fields{"mac": clientHwAddr, "ip": clientIP}).Error("ARP request 2 failed", err)
 			}
 		}
-		log.WithFields(log.Fields{"mac": clientHwAddr, "ip": clientIP}).Error("ARP mac/ip pair does not exist")
+		log.WithFields(log.Fields{"mac": clientHwAddr, "ip": clientIP}).Info("ARP could not detect IP")
 		c.PrintTable()
 	}()
 }
