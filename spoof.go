@@ -17,7 +17,7 @@ import (
 //
 // client will revert back to "normal" when a new IP is detected for the MAC
 func (c *Handler) ForceIPChange(mac net.HardwareAddr) error {
-	if LogAll {
+	if Debug {
 		log.WithFields(log.Fields{"mac": mac}).Debug("ARP capture force IP change")
 	}
 
@@ -35,21 +35,15 @@ func (c *Handler) ForceIPChange(mac net.HardwareAddr) error {
 		return err
 	}
 
-	// create a virtual host and add IPs to its table
-	virtual, _ := c.table.upsert(StateVirtualHost, newVirtualHardwareAddr(), nil)
-	virtual.Online = true
-	for _, ip := range client.IPs {
-		virtual.IPs[string(ip)] = ip
-	}
-
 	client.State = StateHunt
+	go c.spoofLoop(c.ctx, client)
 
 	return nil
 }
 
 // StopIPChange terminate the hunting process
-func (c *Handler) StopIPChange(mac net.HardwareAddr) (err error) {
-	if LogAll {
+func (c *Handler) StopIPChange(mac net.HardwareAddr) error {
+	if Debug {
 		log.WithFields(log.Fields{"mac": mac}).Debug("ARP stop IP change")
 	}
 
@@ -58,20 +52,19 @@ func (c *Handler) StopIPChange(mac net.HardwareAddr) (err error) {
 
 	client := c.table.findByMAC(mac)
 	if client == nil {
-		if LogAll {
-			log.WithFields(log.Fields{"mac": mac}).Debug("ARP client not found")
-		}
-		return nil
+		err := fmt.Errorf("mac %s not found", mac)
+		return err
 	}
 
 	if client.State != StateHunt {
-		if LogAll {
+		err := fmt.Errorf("mac %s not in hunt state", mac)
+		if Debug {
 			log.WithFields(log.Fields{"mac": mac}).Debugf("ARP client not in hunt state: %s", client.State)
 		}
-		return nil
+		return err
 	}
 
-	// this will terminate the spoof gorotutine and delete the Virtual MAC
+	// This will end the spoof goroutine
 	client.State = StateNormal
 	return nil
 }
@@ -80,7 +73,7 @@ func (c *Handler) StopIPChange(mac net.HardwareAddr) (err error) {
 // It is used to get the initial client name.
 //
 func (c *Handler) FakeIPConflict(clientHwAddr net.HardwareAddr, clientIP net.IP) {
-	if LogAll {
+	if Debug {
 		log.WithFields(log.Fields{"mac": clientHwAddr.String(), "ip": clientIP.String()}).Debug("ARP fake IP conflict")
 	}
 
@@ -110,7 +103,7 @@ func (c *Handler) IPChanged(clientHwAddr net.HardwareAddr, clientIP net.IP) {
 		return
 	}
 
-	if LogAll {
+	if Debug {
 		log.WithFields(log.Fields{"mac": clientHwAddr, "ip": clientIP}).Debug("ARP new mac or ip - validating")
 	}
 	if err := c.Request(c.config.HostMAC, c.config.HostIP, EthernetBroadcast, clientIP); err != nil {
@@ -121,7 +114,7 @@ func (c *Handler) IPChanged(clientHwAddr net.HardwareAddr, clientIP net.IP) {
 		for i := 0; i < 5; i++ {
 			time.Sleep(time.Second * 1)
 			if MACEntry := c.table.findByMAC(clientHwAddr); MACEntry != nil && MACEntry.findIP(clientIP) != nil {
-				if LogAll {
+				if Debug {
 					log.WithFields(log.Fields{"mac": clientHwAddr, "ip": clientIP}).Debug("ARP found mac")
 				}
 				return
@@ -137,67 +130,66 @@ func (c *Handler) IPChanged(clientHwAddr net.HardwareAddr, clientIP net.IP) {
 	}()
 }
 
-// spoofLoop create a virtual host to handle this IP and will spoof
-//           the target until it changes IP or go offline.
+// spoofLoop creates a virtual host spoof the target IPs
+// until it changes IP or go offline.
 //
 // It will send a number of ARP packets to:
 //   1. spoof the client arp table to send router packets to us
 //   2. claim the ownership of the IP
 //
-func (c *Handler) spoofLoop(ctx context.Context) error {
+func (c *Handler) spoofLoop(ctx context.Context, client *MACEntry) {
 
+	// 4 second re-arp seem to be adequate;
+	// Experimented with 300ms but no noticeable improvement other the chatty net.
 	ticker := time.NewTicker(time.Second * 4).C
 
+	// create a virtual host and add IPs to its table
+	// Virtual Host will exist while this goroutine is running
+	virtual, _ := c.table.upsert(StateVirtualHost, newVirtualHardwareAddr(), nil)
+	virtual.Online = true
+	startTime := time.Now()
+	nTimes := 0
+	mac := client.MAC
 	for {
-		select {
-		case <-ctx.Done():
-			return nil
-		case <-c.spoofWakeup:
-		case <-ticker:
+		c.Lock()
+
+		log.WithFields(log.Fields{"mac": mac}).Infof("ARP claim IP start %v", startTime)
+
+		// Always search for MAC in case it has been deleted.
+		client := c.table.findByMAC(mac)
+		if client == nil || client.State != StateHunt {
+			c.table.delete(virtual.MAC)
+			log.WithFields(log.Fields{"mac": mac, "ips": client.IPs}).Infof("ARP claim IP end repeat=%v duration=%v", nTimes, time.Now().Sub(startTime))
+			return
 		}
 
-		// Virtual Host will exist while this goroutine is running
-		c.Lock()
-		for _, ip := range client.IPs {
+		if nTimes%16 == 0 {
+			log.WithFields(log.Fields{"mac": mac.String()}).Infof("ARP claim IP repeat=%v duration=%v", nTimes, time.Now().Sub(startTime))
+		}
+		nTimes++
+
+		// update ips - list may have been updated
+		for _, v := range client.IPs {
+			virtual.updateIP(v.IP)
 		}
 		c.Unlock()
 
-		// Always search for MAC in case it has been deleted.
-		mac := client.MAC
-		nTimes := 0
-		startTime := time.Now()
-
-		log.WithFields(log.Fields{"mac": mac.String(), "ip": virtual.IP}).Infof("ARP claim IP start %v", startTime)
-
-		for {
-			client = c.table.findByMAC(mac)
-			if h.Stopping() == true || client == nil || client.State != StateHunt {
-				c.deleteVirtualMAC(virtual)
-				newIP := net.IPv4zero
-				if client != nil {
-					newIP = client.IP
-				}
-				log.WithFields(log.Fields{"mac": mac.String(), "ip": virtual.IP, "newIP": newIP}).Infof("ARP claim IP end repeat=%v duration=%v", nTimes, time.Now().Sub(startTime))
-				return
-			}
-
-			if nTimes%16 == 0 {
-				log.WithFields(log.Fields{"mac": mac.String(), "ip": virtual.IP}).Infof("ARP claim IP repeat=%v duration=%v", nTimes, time.Now().Sub(startTime))
-			}
-			nTimes++
+		for _, v := range virtual.IPs {
 
 			// Re-arp target to change router to host so all traffic comes to us
 			// i.e. tell target I am 192.168.0.1
 			//
 			// Use virtual IP as it is guaranteed to not change.
-			c.forceSpoof(client.MAC, virtual.IP) // NOTE: virtual is the target IP
+			c.forceSpoof(mac, v.IP)
 
 			// Use VirtualHost to request ownership of the IP; try to force target to acquire another IP
-			c.forceAnnouncement(virtual.MAC, virtual.IP)
+			c.forceAnnouncement(virtual.MAC, v.IP)
+		}
 
-			// 4 second re-arp seem to be adequate;
-			// Experimented with 300ms but no noticeable improvement other the chatty net.
-			time.Sleep(time.Second * 4)
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker:
 		}
 	}
 }

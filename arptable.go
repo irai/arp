@@ -1,7 +1,6 @@
 package arp
 
 import (
-	"bytes"
 	"fmt"
 	"math/rand"
 	"net"
@@ -10,10 +9,9 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// IPMACEntry holds info about each IP
+// IPEntry holds info about each IP
 type IPEntry struct {
 	IP          net.IP
-	MACEntry    *MACEntry
 	LastUpdated time.Time
 }
 
@@ -55,8 +53,8 @@ const (
 )
 
 // String interface
-func (e *MACEntry) String() {
-	fmt.Sprintf("%5v %10s %18s  %14s  %v", e.Online, e.State, e.MAC, e.IPs, time.Since(e.LastUpdated))
+func (e *MACEntry) String() string {
+	return fmt.Sprintf("%5v %10s %18s  %14s  %v", e.Online, e.State, e.MAC, e.IPs, time.Since(e.LastUpdated))
 }
 
 func (t *arpTable) findByMAC(mac net.HardwareAddr) *MACEntry {
@@ -104,7 +102,7 @@ func (t *arpTable) getTable() (table []MACEntry) {
 func (e *MACEntry) updateIP(ip net.IP) (entry IPEntry, found bool) {
 	_, ok := e.IPs[string(ip)]
 
-	entry = IPEntry{IP: ip, LastUpdated: time.Now(), MACEntry: e}
+	entry = IPEntry{IP: ip, LastUpdated: time.Now()}
 	e.IPs[string(ip)] = entry
 	return entry, ok
 }
@@ -116,7 +114,7 @@ func (t *arpTable) upsert(state arpState, mac net.HardwareAddr, ip net.IP) (entr
 	if !found {
 		e = &MACEntry{State: state, MAC: mac, IPs: make(map[string]IPEntry, 6), LastUpdated: time.Now(), Online: false}
 		t.macTable[string(mac)] = e
-		if LogAll {
+		if Debug {
 			log.WithFields(log.Fields{"ip": ip, "mac": mac}).Debug("ARP new mac detected")
 		}
 	} else {
@@ -131,7 +129,7 @@ func (t *arpTable) upsert(state arpState, mac net.HardwareAddr, ip net.IP) (entr
 
 	// replace IP value
 	ipEntry, ok := e.IPs[string(ip)]
-	ipEntry = IPEntry{IP: ip, LastUpdated: time.Now(), MACEntry: e}
+	ipEntry = IPEntry{IP: ip, LastUpdated: time.Now()}
 	e.IPs[string(ip)] = ipEntry
 	if found && ok {
 		return e, true
@@ -142,7 +140,7 @@ func (t *arpTable) upsert(state arpState, mac net.HardwareAddr, ip net.IP) (entr
 
 func (t *arpTable) delete(mac net.HardwareAddr) {
 	e, _ := t.macTable[string(mac)]
-	if LogAll {
+	if Debug {
 		log.WithFields(log.Fields{"mac": mac}).Debugf("ARP delete MACEntry %s", e)
 	}
 	if e == nil {
@@ -151,49 +149,10 @@ func (t *arpTable) delete(mac net.HardwareAddr) {
 	delete(t.macTable, string(mac))
 }
 
-/***
-func (t *arpTable) deleteIP(ip net.IP) {
-	e, _ := t.ipTable[string(ip)]
-	if e == nil {
-		return
-	}
-
-	if LogAll {
-		log.WithFields(log.Fields{"ip": ip}).Debugf("ARP delete ip entry %+v", e)
-	}
-
-	// delete IP from mac table and delete mac entry if last IP
-	delete(e.MACEntry.IPs, string(ip))
-	if len(e.MACEntry.IPs) <= 0 {
-		t.delete(e.MACEntry.MAC)
-	}
-
-	delete(t.ipTable, string(ip))
-}
-***/
-
-func (t *arpTable) deleteVirtualMAC(virtual *MACEntry) error {
-
-	entry, _ := t.macTable[string(virtual.MAC)]
-	if entry == nil {
-		return fmt.Errorf("virtual mac does not exist: %v", virtual.MAC)
-	}
-
-	if !bytes.Equal(entry.MAC, virtual.MAC) || entry.State != StateVirtualHost {
-		return fmt.Errorf("failed to delete non virtual mac: %v %v %v", virtual.MAC, entry.MAC, entry.State)
-	}
-
-	delete(t.macTable, string(virtual.MAC))
-	return nil
-}
-
 func newVirtualHardwareAddr() net.HardwareAddr {
 	buf := make([]byte, 6)
-	_, err := rand.Read(buf)
-	if err != nil {
-		log.Error("ARP error in new virtual MAC", err)
-		return net.HardwareAddr{}
-	}
+	rand.Read(buf) // always return nil error; see signature
+
 	// Set the local bit
 	buf[0] = (buf[0] | 2) & 0xfe // Set local bit, ensure unicast address
 	mac, _ := net.ParseMAC(fmt.Sprintf("%02x:%02x:%02x:%02x:%02x:%02x", buf[0], buf[1], buf[2], buf[3], buf[4], buf[5]))

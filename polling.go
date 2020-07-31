@@ -19,7 +19,7 @@ func (c *Handler) scanLoop(ctx context.Context, interval time.Duration) error {
 			return nil
 
 		case <-ticker:
-			if err := c.ScanNetwork(c.config.HomeLAN); err != nil {
+			if err := c.ScanNetwork(c.ctx, c.config.HomeLAN); err != nil {
 				return fmt.Errorf("scanLoop goroutine failed: %w", err)
 			}
 		}
@@ -44,11 +44,11 @@ func (c *Handler) probeOnlineLoop(ctx context.Context, interval time.Duration) e
 					// continue
 					// }
 					for _, v := range entry.IPs {
-						if LogAll {
+						if Debug {
 							log.WithFields(log.Fields{"mac": entry.MAC}).Debugf("Is device %s online? requesting...", v.IP)
 						}
 						if err := c.request(c.config.HostMAC, c.config.HostIP, entry.MAC, v.IP); err != nil {
-							log.WithFields(log.Fields{"mac": v.MACEntry.MAC, "ip": v.IP}).Error("Error ARP request: ", err)
+							log.WithFields(log.Fields{"mac": entry.MAC, "ip": v.IP}).Error("Error ARP request: ", err)
 						}
 					}
 				}
@@ -105,12 +105,13 @@ func (c *Handler) purgeLoop(ctx context.Context, interval time.Duration) error {
 	}
 }
 
-func (c *Handler) ScanNetwork(lan net.IPNet) error {
+// ScanNetwork sends 256 arp requests to identify IPs on the lan
+func (c *Handler) ScanNetwork(ctx context.Context, lan net.IPNet) error {
 
 	// Copy underneath array so we can modify value.
 	ip := lan.IP
 
-	if LogAll {
+	if Debug {
 		log.Debugf("ARP Discovering IP - sending 254 ARP requests - lan %v", lan)
 	}
 	for host := 1; host < 255; host++ {
@@ -120,7 +121,7 @@ func (c *Handler) ScanNetwork(lan net.IPNet) error {
 		// Skip entries that are online; these will be checked somewhere else
 		//
 		if MACEntry := c.table.findByIP(ip); MACEntry != nil && MACEntry.Online {
-			if LogAll {
+			if Debug {
 				log.WithFields(log.Fields{"mac": MACEntry.MAC, "ip": }).Debug("ARP skip request for online device")
 			}
 			continue
@@ -128,19 +129,21 @@ func (c *Handler) ScanNetwork(lan net.IPNet) error {
 		***/
 
 		err := c.request(c.config.HostMAC, c.config.HostIP, EthernetBroadcast, ip)
-		if c.goroutinePool.Stopping() {
+		if ctx.Err() != nil {
 			return nil
 		}
 		if err != nil {
-			log.Error("ARP request error ", err)
 			if err1, ok := err.(net.Error); ok && err1.Temporary() {
-				if LogAll {
+				if Debug {
 					log.Debug("ARP error in read socket is temporary - retry", err1)
 				}
 				time.Sleep(time.Millisecond * 100) // Wait before retrying
 				continue
 			}
 
+			if Debug {
+				log.Error("ARP request error ", err)
+			}
 			return err
 		}
 		time.Sleep(time.Millisecond * 25)

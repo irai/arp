@@ -26,45 +26,31 @@ type Config struct {
 
 // Handler is used to handle ARP packets for a given interface.
 type Handler struct {
-	client        *marp.Client
-	table         *arpTable
-	notification  chan<- MACEntry // notification channel for state change
-	config        Config
-	goroutinePool *goroutinePool // handler specific pool in case we have two instances
+	client       *marp.Client
+	table        *arpTable
+	notification chan<- MACEntry // notification channel for state change
+	config       Config
 	sync.RWMutex
+	ctx context.Context // context to cancel internal goroutines
 }
 
 var (
-	// LogAll controls the level of logging required. By default we only log
-	// error and warning.
-	// Set LogAll to true to see all logs.
-	LogAll bool
+	// Debug - set Debug to true to see debugging messages
+	Debug bool
 )
-
-func getArpClient(nic string) (*marp.Client, error) {
-	ifi, err := net.InterfaceByName(nic)
-	if err != nil {
-		log.Error("ARP Reply error in interface name", err)
-		return nil, err
-	}
-
-	// Set up ARP client with socket
-	c, err := marp.Dial(ifi)
-	if err != nil {
-		log.Error("ARP Reply error in dial", err)
-		return nil, err
-	}
-	return c, nil
-}
 
 // NewHandler creates an ARP handler for a given interface.
 func NewHandler(config Config) (c *Handler, err error) {
 	c = &Handler{}
-	c.goroutinePool = GoroutinePool.new("arppool")
-	c.client, err = getArpClient(config.NIC)
+	ifi, err := net.InterfaceByName(config.NIC)
 	if err != nil {
-		log.WithFields(log.Fields{"nic": config.NIC}).Error("ARP error in dial", err)
-		return nil, err
+		return nil, fmt.Errorf("InterfaceByName error: %w", err)
+	}
+
+	// Set up ARP client with socket
+	c.client, err = marp.Dial(ifi)
+	if err != nil {
+		return nil, fmt.Errorf("ARP dial error: %w", err)
 	}
 
 	c.table = newARPTable()
@@ -83,7 +69,7 @@ func NewHandler(config Config) (c *Handler, err error) {
 		c.config.OnlineProbeInterval = time.Minute * 2
 	}
 
-	if LogAll {
+	if Debug {
 		log.WithFields(log.Fields{"hostinterface": c.config.NIC, "hostmac": c.config.HostMAC.String(),
 			"hostip": c.config.HostIP.String(), "lanrouter": c.config.RouterIP.String()}).Debug("ARP Config")
 	}
@@ -149,7 +135,7 @@ func (c *Handler) updateClient(client *MACEntry, senderMAC net.HardwareAddr, sen
 	client.updateIP(dupIP(senderIP))
 	c.Unlock()
 
-	if LogAll {
+	if Debug {
 		log.WithFields(log.Fields{"mac": client.MAC.String(), "ips": client.IPs}).Debugf("ARP client updated IP to %s", senderIP)
 	}
 
@@ -172,12 +158,12 @@ func (c *Handler) processRequestInHuntState(client *MACEntry, senderIP net.IP, t
 		return 0, nil
 	}
 
-	if LogAll {
+	if Debug {
 		log.WithFields(log.Fields{"mac": client.MAC, "ip": targetIP}).Debugf("ARP client announcement in hunt state %s", targetIP)
 	}
 
 	if _, found := client.updateIP(targetIP); found { // is this an existing IP?
-		if LogAll {
+		if Debug {
 			log.WithFields(log.Fields{"mac": client.MAC, "ip": targetIP}).Debugf("ARP client attempting to get same IP %s", targetIP)
 		}
 		return 0, fmt.Errorf("error updating client: %s, %v ", client.MAC, targetIP)
@@ -187,10 +173,8 @@ func (c *Handler) processRequestInHuntState(client *MACEntry, senderIP net.IP, t
 	// and delete the virtual IP.
 	//
 	client.State = StateNormal
-	if c.table.findVirtualIP()
-	c.endHunt(client)
 
-	if LogAll {
+	if Debug {
 		log.WithFields(log.Fields{"mac": client.MAC.String(), "ips": client.IPs}).Debugf("ARP client updated IP to %s", senderIP)
 	}
 
@@ -214,14 +198,22 @@ func (c *Handler) processRequestInHuntState(client *MACEntry, senderIP net.IP, t
 // A virtual MAC is a fake mac address used when claiming an existing IP during spoofing.
 // ListenAndServe will send ARP reply on behalf of virtual MACs
 //
-func (c *Handler) ListenAndServe(ctx context.Context) {
+func (c *Handler) ListenAndServe(ctx context.Context) error {
 
 	var wg sync.WaitGroup
+
+	// Set ZERO timeout to block forever
+	if err := c.client.SetReadDeadline(time.Time{}); err != nil {
+		return fmt.Errorf("ARP error in socket: %w", err)
+	}
+
+	myctx, cancel := context.WithCancel(ctx)
+	c.ctx = myctx
 
 	// to continuosly scan for network devices
 	go func() {
 		wg.Add(1)
-		if err := c.scanLoop(ctx, c.config.FullNetworkScanInterval); err != nil {
+		if err := c.scanLoop(c.ctx, c.config.FullNetworkScanInterval); err != nil {
 			log.Error("ARP ListenAndServer scanLoop terminated unexpectedly", err)
 		}
 		wg.Done()
@@ -230,7 +222,7 @@ func (c *Handler) ListenAndServe(ctx context.Context) {
 	// continously probe for online reply
 	go func() {
 		wg.Add(1)
-		if err := c.probeOnlineLoop(ctx, c.config.OnlineProbeInterval); err != nil {
+		if err := c.probeOnlineLoop(c.ctx, c.config.OnlineProbeInterval); err != nil {
 			log.Error("ARP ListenAndServer probeOnlineLoop terminated unexpectedly", err)
 		}
 		wg.Done()
@@ -239,7 +231,7 @@ func (c *Handler) ListenAndServe(ctx context.Context) {
 	// continously check for online-offline transition
 	go func() {
 		wg.Add(1)
-		if err := c.purgeLoop(ctx, c.config.OnlineProbeInterval*2); err != nil {
+		if err := c.purgeLoop(c.ctx, c.config.OnlineProbeInterval*2); err != nil {
 			log.Error("ARP ListenAndServer purgeLoop terminated unexpectedly", err)
 		}
 		wg.Done()
@@ -247,31 +239,29 @@ func (c *Handler) ListenAndServe(ctx context.Context) {
 
 	go func() {
 		time.Sleep(time.Millisecond * 100) // Time to start read loop below
-		c.ScanNetwork(c.config.HomeLAN)
+		c.ScanNetwork(c.ctx, c.config.HomeLAN)
 	}()
-
-	// Set ZERO timeout to block forever
-	if err := c.client.SetReadDeadline(time.Time{}); err != nil {
-		log.Error("ARP error in socket:", err)
-		return
-	}
 
 	// Loop and wait for ARP packets
 	for {
 		packet, _, err := c.client.Read()
 		if ctx.Err() != nil {
-			return
+			cancel()
+			return nil
 		}
 		if err != nil {
-			log.Error("ARP read error ", err)
 			if err1, ok := err.(net.Error); ok && err1.Temporary() {
-				if LogAll {
+				if Debug {
 					log.Debug("ARP read error is temporary - retry", err1)
 				}
 				time.Sleep(time.Millisecond * 30) // Wait a few seconds before retrying
 				continue
 			}
-			return
+			if Debug {
+				log.Error("ARP read error ", err)
+			}
+			cancel()
+			return fmt.Errorf("ARP ListenAndServer terminated unexpectedly: %w", err)
 		}
 
 		notify := 0
@@ -279,7 +269,7 @@ func (c *Handler) ListenAndServe(ctx context.Context) {
 		// skip link local packets
 		if packet.SenderIP.IsLinkLocalUnicast() ||
 			packet.TargetIP.IsLinkLocalUnicast() {
-			if LogAll {
+			if Debug {
 				log.WithFields(log.Fields{"senderip": packet.SenderIP, "targetip": packet.TargetIP}).Debug("ARP skipping link local packet")
 			}
 			continue
@@ -297,7 +287,7 @@ func (c *Handler) ListenAndServe(ctx context.Context) {
 			if packet.Operation == marp.OperationRequest && packet.SenderIP.Equal(net.IPv4zero) {
 				c.Unlock()
 
-				if LogAll {
+				if Debug {
 					log.WithFields(log.Fields{"sendermac": packet.SenderHardwareAddr, "senderip": packet.SenderIP, "targetip": packet.TargetIP}).
 						Debug("ARP acd probe received")
 				}
@@ -323,7 +313,7 @@ func (c *Handler) ListenAndServe(ctx context.Context) {
 		// Reply to ARP request if we are spoofing this host.
 		//
 		case marp.OperationRequest:
-			if LogAll {
+			if Debug {
 				if packet.SenderIP.Equal(packet.TargetIP) {
 					log.WithFields(log.Fields{"mac": sender.MAC, "ip": packet.SenderIP, "state": sender.State}).Debug("ARP announcement received")
 				} else {
@@ -335,7 +325,7 @@ func (c *Handler) ListenAndServe(ctx context.Context) {
 			// if target is virtual host, reply and return
 			// search by IP
 			if target := c.table.findVirtualIP(packet.TargetIP); target != nil {
-				if LogAll {
+				if Debug {
 					log.WithFields(log.Fields{"ip": packet.TargetIP, "mac": target.MAC}).Debug("ARP sending reply for virtual mac")
 				}
 				c.reply(target.MAC, packet.TargetIP, EthernetBroadcast, packet.TargetIP)
@@ -355,7 +345,7 @@ func (c *Handler) ListenAndServe(ctx context.Context) {
 			}
 
 		case marp.OperationReply:
-			if LogAll {
+			if Debug {
 				log.WithFields(log.Fields{
 					"ip": packet.SenderIP, "mac": sender.MAC, "state": sender.State,
 					"senderip": packet.SenderIP.String(), "to_mac": packet.TargetHardwareAddr, "to_ip": packet.TargetIP}).
@@ -366,7 +356,7 @@ func (c *Handler) ListenAndServe(ctx context.Context) {
 			case StateNormal:
 				_, found := sender.updateIP(dupIP(packet.SenderIP))
 				if !found {
-					if LogAll {
+					if Debug {
 						log.WithFields(log.Fields{"mac": sender.MAC, "ip": packet.SenderIP}).Debugf("ARP client updated reply IP to %s", packet.SenderIP)
 					}
 					notify++
