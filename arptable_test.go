@@ -40,11 +40,11 @@ func Test_AddMany(t *testing.T) {
 	MACEntry3, _ := h.table.upsert(StateNormal, mac3, ip3)
 
 	if len(h.table.macTable) != 3 || MACEntry != h.table.findByMAC(mac1) || MACEntry != h.table.findByIP(ip1) {
-		h.PrintTable()
+		h.printTable()
 		t.Error("expected cannot find MACEntry 3 ", len(h.table.macTable), mac3.String(), ip3)
 	}
 	if len(h.table.macTable) != 3 || MACEntry3 != h.table.findByMAC(mac3) || MACEntry3 != h.table.findByIP(ip3) {
-		h.PrintTable()
+		h.printTable()
 		t.Error("expected cannot find MACEntry 3 ", len(h.table.macTable), mac3.String(), ip3)
 	}
 	if len(h.table.macTable) != 3 || MACEntry2 != h.table.findByMAC(mac2) || MACEntry2 != h.table.findByIP(ip2) {
@@ -63,7 +63,7 @@ func Test_AddMany(t *testing.T) {
 
 	MACEntry2, _ = h.table.upsert(StateNormal, mac2, ip2)
 	if len(h.table.macTable) != 3 || MACEntry2 != h.table.findByMAC(mac2) || MACEntry2 != h.table.findByIP(ip2) {
-		h.PrintTable()
+		h.printTable()
 		t.Error("expected cannot find MACEntry 2 third", len(h.table.macTable), mac1.String(), ip1)
 	}
 }

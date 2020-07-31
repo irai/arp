@@ -50,7 +50,7 @@ listen for ARP changes and generate a notification each time a mac changes betwe
 
 	go c.ListenAndServe(time.Second * 30 * 5)
 
-	c.PrintTable()
+	c.printTable()
 ```
 
 Listen to changes to mac table
