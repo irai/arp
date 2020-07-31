@@ -33,11 +33,11 @@ func (e *MACEntry) findIP(ip net.IP) net.IP {
 
 type arpTable struct {
 	macTable map[string]*MACEntry
-	ipTable  map[string]*IPEntry
+	// ipTable  map[string]*IPEntry
 }
 
 func newARPTable() *arpTable {
-	t := &arpTable{macTable: make(map[string]*MACEntry, 32), ipTable: make(map[string]*IPEntry)}
+	t := &arpTable{macTable: make(map[string]*MACEntry, 32)}
 	return t
 }
 
@@ -66,20 +66,28 @@ func (t *arpTable) findByMAC(mac net.HardwareAddr) *MACEntry {
 
 // findByIP return the MACEntry or nil if not found.
 func (t *arpTable) findVirtualIP(ip net.IP) *MACEntry {
-	e, _ := t.ipTable[string(ip)]
-	if e == nil || e.MACEntry.State == StateVirtualHost {
-		return nil
+	for _, v := range t.macTable {
+		if v.State != StateVirtualHost {
+			continue
+		}
+		if _, ok := v.IPs[string(ip)]; ok {
+			return v
+		}
 	}
-	return e.MACEntry
+	return nil
 }
 
 // findVirtualIP return the MACEntry or nil if not found.
 func (t *arpTable) findByIP(ip net.IP) *MACEntry {
-	e, _ := t.ipTable[string(ip)]
-	if e == nil {
-		return nil
+	for _, v := range t.macTable {
+		if v.State == StateVirtualHost {
+			continue
+		}
+		if _, ok := v.IPs[string(ip)]; ok {
+			return v
+		}
 	}
-	return e.MACEntry
+	return nil
 }
 
 // GetTable return a shallow copy of the arp table
@@ -93,32 +101,21 @@ func (t *arpTable) getTable() (table []MACEntry) {
 	return table
 }
 
-func (t *arpTable) updateIP(e *MACEntry, ip net.IP) (entry *IPEntry, found bool) {
-	now := time.Now()
-	e.IPs[string(ip)] = IPEntry{IP: ip, LastUpdated: now}
+func (e *MACEntry) updateIP(ip net.IP) (entry IPEntry, found bool) {
+	_, ok := e.IPs[string(ip)]
 
-	found = true
-	ipEntry, _ := t.ipTable[string(ip)]
-	if ipEntry == nil {
-		ipEntry = &IPEntry{IP: ip, LastUpdated: time.Now(), MACEntry: e}
-		t.ipTable[string(ip)] = ipEntry
-		found = false
-	} else {
-		ipEntry.MACEntry = e
-		ipEntry.LastUpdated = e.LastUpdated
-	}
-	return ipEntry, found
+	entry = IPEntry{IP: ip, LastUpdated: time.Now(), MACEntry: e}
+	e.IPs[string(ip)] = entry
+	return entry, ok
 }
 
-func (t *arpTable) upsert(state arpState, mac net.HardwareAddr, ip net.IP) (*MACEntry, bool) {
-	newEntry := false
+func (t *arpTable) upsert(state arpState, mac net.HardwareAddr, ip net.IP) (entry *MACEntry, found bool) {
 
 	// insert or update mac
-	e, _ := t.macTable[string(mac)]
-	if e == nil {
-		e = &MACEntry{State: state, MAC: mac, IPs: make(map[string]net.IP, 6), LastUpdated: time.Now(), Online: false}
+	e, found := t.macTable[string(mac)]
+	if !found {
+		e = &MACEntry{State: state, MAC: mac, IPs: make(map[string]IPEntry, 6), LastUpdated: time.Now(), Online: false}
 		t.macTable[string(mac)] = e
-		newEntry = true
 		if LogAll {
 			log.WithFields(log.Fields{"ip": ip, "mac": mac}).Debug("ARP new mac detected")
 		}
@@ -129,22 +126,18 @@ func (t *arpTable) upsert(state arpState, mac net.HardwareAddr, ip net.IP) (*MAC
 	}
 
 	if ip == nil {
-		return e, newEntry
+		return e, found
 	}
 
-	// insert or update ip
-	ipEntry, _ := t.ipTable[string(ip)]
-	if ipEntry == nil {
-		e.IPs[string(ip)] = ip
-		ipEntry = &IPEntry{IP: ip, LastUpdated: time.Now(), MACEntry: e}
-		t.ipTable[string(ip)] = ipEntry
-	} else {
-		e.IPs[string(ip)] = ip
-		ipEntry.MACEntry = e
-		ipEntry.LastUpdated = time.Now()
+	// replace IP value
+	ipEntry, ok := e.IPs[string(ip)]
+	ipEntry = IPEntry{IP: ip, LastUpdated: time.Now(), MACEntry: e}
+	e.IPs[string(ip)] = ipEntry
+	if found && ok {
+		return e, true
 	}
 
-	return e, newEntry
+	return e, false
 }
 
 func (t *arpTable) delete(mac net.HardwareAddr) {
@@ -155,13 +148,10 @@ func (t *arpTable) delete(mac net.HardwareAddr) {
 	if e == nil {
 		return
 	}
-	ips := e.IPs
 	delete(t.macTable, string(mac))
-	for _, v := range ips {
-		delete(t.ipTable, string(v))
-	}
 }
 
+/***
 func (t *arpTable) deleteIP(ip net.IP) {
 	e, _ := t.ipTable[string(ip)]
 	if e == nil {
@@ -180,6 +170,7 @@ func (t *arpTable) deleteIP(ip net.IP) {
 
 	delete(t.ipTable, string(ip))
 }
+***/
 
 func (t *arpTable) deleteVirtualMAC(virtual *MACEntry) error {
 

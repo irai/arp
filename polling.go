@@ -37,21 +37,23 @@ func (c *Handler) probeOnlineLoop(ctx context.Context, interval time.Duration) e
 			refreshCutoff := time.Now().Add(interval * -1)
 			c.RLock()
 
-			for _, v := range c.table.ipTable {
-				if v.LastUpdated.Before(refreshCutoff) {
+			for _, entry := range c.table.macTable {
+				if entry.LastUpdated.Before(refreshCutoff) {
 					// Ignore empty entries and link local
 					// if e.IP.IsLinkLocalUnicast() {
 					// continue
 					// }
-					if LogAll {
-						log.WithFields(log.Fields{"mac": v.MACEntry.MAC, "ip": v}).Debug("Is device online? requesting...")
-					}
-					if err := c.request(c.config.HostMAC, c.config.HostIP, v.MACEntry.MAC, v.IP); err != nil {
-						log.WithFields(log.Fields{"mac": v.MACEntry.MAC, "ip": v.IP}).Error("Error ARP request: ", err)
+					for _, v := range entry.IPs {
+						if LogAll {
+							log.WithFields(log.Fields{"mac": entry.MAC}).Debugf("Is device %s online? requesting...", v.IP)
+						}
+						if err := c.request(c.config.HostMAC, c.config.HostIP, entry.MAC, v.IP); err != nil {
+							log.WithFields(log.Fields{"mac": v.MACEntry.MAC, "ip": v.IP}).Error("Error ARP request: ", err)
+						}
 					}
 				}
+				c.RUnlock()
 			}
-			c.RUnlock()
 		}
 	}
 }
@@ -72,24 +74,24 @@ func (c *Handler) purgeLoop(ctx context.Context, interval time.Duration) error {
 			macs := make([]net.HardwareAddr, 16)
 
 			c.Lock()
-			for _, e := range c.table.ipTable {
+			for _, e := range c.table.macTable {
 
 				// Delete from ARP table if the device was not seen for the last hour
-				if e.MACEntry.LastUpdated.Before(deleteCutoff) {
-					macs = append(macs, e.MACEntry.MAC)
+				if e.LastUpdated.Before(deleteCutoff) {
+					macs = append(macs, e.MAC)
 					continue
 				}
 
 				// Set offline if no updates since the offline deadline
-				if e.MACEntry.Online && e.LastUpdated.Before(offlineCutoff) {
-					log.WithFields(log.Fields{"mac": e.MACEntry.MAC, "ips": e.MACEntry.IPs}).Info("ARP device is offline")
+				if e.Online && e.LastUpdated.Before(offlineCutoff) {
+					log.WithFields(log.Fields{"mac": e.MAC, "ips": e.IPs}).Info("ARP device is offline")
 
-					e.MACEntry.Online = false
-					e.MACEntry.State = StateNormal // Stop hunt if in progress
+					e.Online = false
+					e.State = StateNormal // Stop hunt if in progress
 
 					// Notify upstream the device changed to offline
 					if c.notification != nil {
-						c.notification <- *e.MACEntry
+						c.notification <- *e
 					}
 				}
 			}
@@ -114,14 +116,16 @@ func (c *Handler) ScanNetwork(lan net.IPNet) error {
 	for host := 1; host < 255; host++ {
 		ip[3] = byte(host)
 
+		/***
 		// Skip entries that are online; these will be checked somewhere else
 		//
 		if MACEntry := c.table.findByIP(ip); MACEntry != nil && MACEntry.Online {
 			if LogAll {
-				log.WithFields(log.Fields{"mac": MACEntry.MAC, "ip": MACEntry.IP}).Debug("ARP skip request for online device")
+				log.WithFields(log.Fields{"mac": MACEntry.MAC, "ip": }).Debug("ARP skip request for online device")
 			}
 			continue
 		}
+		***/
 
 		err := c.request(c.config.HostMAC, c.config.HostIP, EthernetBroadcast, ip)
 		if c.goroutinePool.Stopping() {

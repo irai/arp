@@ -35,7 +35,6 @@ func (c *Handler) ForceIPChange(mac net.HardwareAddr) error {
 		return err
 	}
 
-
 	// create a virtual host and add IPs to its table
 	virtual, _ := c.table.upsert(StateVirtualHost, newVirtualHardwareAddr(), nil)
 	virtual.Online = true
@@ -157,48 +156,49 @@ func (c *Handler) spoofLoop(ctx context.Context) error {
 		case <-ticker:
 		}
 
-	// Virtual Host will exist while this goroutine is running
-	c.Lock()
-	for _, ip := range client.IPs {
-	}
-	c.Unlock()
+		// Virtual Host will exist while this goroutine is running
+		c.Lock()
+		for _, ip := range client.IPs {
+		}
+		c.Unlock()
 
-	// Always search for MAC in case it has been deleted.
-	mac := client.MAC
-	nTimes := 0
-	startTime := time.Now()
+		// Always search for MAC in case it has been deleted.
+		mac := client.MAC
+		nTimes := 0
+		startTime := time.Now()
 
-	log.WithFields(log.Fields{"mac": mac.String(), "ip": virtual.IP}).Infof("ARP claim IP start %v", startTime)
+		log.WithFields(log.Fields{"mac": mac.String(), "ip": virtual.IP}).Infof("ARP claim IP start %v", startTime)
 
-	for {
-		client = c.table.findByMAC(mac)
-		if h.Stopping() == true || client == nil || client.State != StateHunt {
-			c.deleteVirtualMAC(virtual)
-			newIP := net.IPv4zero
-			if client != nil {
-				newIP = client.IP
+		for {
+			client = c.table.findByMAC(mac)
+			if h.Stopping() == true || client == nil || client.State != StateHunt {
+				c.deleteVirtualMAC(virtual)
+				newIP := net.IPv4zero
+				if client != nil {
+					newIP = client.IP
+				}
+				log.WithFields(log.Fields{"mac": mac.String(), "ip": virtual.IP, "newIP": newIP}).Infof("ARP claim IP end repeat=%v duration=%v", nTimes, time.Now().Sub(startTime))
+				return
 			}
-			log.WithFields(log.Fields{"mac": mac.String(), "ip": virtual.IP, "newIP": newIP}).Infof("ARP claim IP end repeat=%v duration=%v", nTimes, time.Now().Sub(startTime))
-			return
+
+			if nTimes%16 == 0 {
+				log.WithFields(log.Fields{"mac": mac.String(), "ip": virtual.IP}).Infof("ARP claim IP repeat=%v duration=%v", nTimes, time.Now().Sub(startTime))
+			}
+			nTimes++
+
+			// Re-arp target to change router to host so all traffic comes to us
+			// i.e. tell target I am 192.168.0.1
+			//
+			// Use virtual IP as it is guaranteed to not change.
+			c.forceSpoof(client.MAC, virtual.IP) // NOTE: virtual is the target IP
+
+			// Use VirtualHost to request ownership of the IP; try to force target to acquire another IP
+			c.forceAnnouncement(virtual.MAC, virtual.IP)
+
+			// 4 second re-arp seem to be adequate;
+			// Experimented with 300ms but no noticeable improvement other the chatty net.
+			time.Sleep(time.Second * 4)
 		}
-
-		if nTimes%16 == 0 {
-			log.WithFields(log.Fields{"mac": mac.String(), "ip": virtual.IP}).Infof("ARP claim IP repeat=%v duration=%v", nTimes, time.Now().Sub(startTime))
-		}
-		nTimes++
-
-		// Re-arp target to change router to host so all traffic comes to us
-		// i.e. tell target I am 192.168.0.1
-		//
-		// Use virtual IP as it is guaranteed to not change.
-		c.forceSpoof(client.MAC, virtual.IP) // NOTE: virtual is the target IP
-
-		// Use VirtualHost to request ownership of the IP; try to force target to acquire another IP
-		c.forceAnnouncement(virtual.MAC, virtual.IP)
-
-		// 4 second re-arp seem to be adequate;
-		// Experimented with 300ms but no noticeable improvement other the chatty net.
-		time.Sleep(time.Second * 4)
 	}
 }
 
