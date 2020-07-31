@@ -1,6 +1,7 @@
 package arp
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"time"
@@ -15,62 +16,63 @@ import (
 //  4. callback when we receive a change of IP for the client
 //
 // client will revert back to "normal" when a new IP is detected for the MAC
-func (c *Handler) ForceIPChange(clientHwAddr net.HardwareAddr, clientIP net.IP) error {
+func (c *Handler) ForceIPChange(mac net.HardwareAddr) error {
 	if LogAll {
-		log.WithFields(log.Fields{"mac": clientHwAddr.String(), "ip": clientIP.String()}).Debug("ARP capture force IP change")
+		log.WithFields(log.Fields{"mac": mac}).Debug("ARP capture force IP change")
 	}
 
-	client := c.FindMAC(clientHwAddr)
+	c.Lock()
+	defer c.Unlock()
+
+	client := c.table.findByMAC(mac)
 	if client == nil {
-		err := fmt.Errorf("mac %s is not online", clientHwAddr.String())
-		if LogAll {
-			log.Debug("ARP nothing to do - ", err)
-		}
+		err := fmt.Errorf("mac %s is not online", mac)
 		return err
 	}
 
 	if client.State == StateHunt {
-		err := fmt.Errorf("client already in hunt state %s ", client.IP.String())
-		if LogAll {
-			log.Debug("ARP error in ForceIPChange", err)
+		err := fmt.Errorf("mac %s already in hunt state", mac)
+		return err
+	}
+
+
+	// move all IPs to virtual host
+	virtual, _ := c.table.upsert(StateVirtualHost, newVirtualHardwareAddr(), nil)
+	virtual.Online = true
+	for _, e := range c.ipTable {
+		if e.MACEntry == client {
+e.MACEntry = virtual
 		}
-		return err
 	}
 
-	if client.IP.Equal(clientIP) == false {
-		err := fmt.Errorf("ARP capture error missmatch in client table with actual client %s vs %s", client.IP.String(), clientIP.String())
-		log.Warn("ARP unexpected IP missmatch - do nothing", err)
-		return err
-	}
-
-	// Set client to Hunt
 	client.State = StateHunt
-
-	// client.IP = nextFakeIP()
-
-	// spoof client until end of hunt phase
-	go c.spoofLoop(client)
+	client.IPs = []net.IP{}
 
 	return nil
 }
 
 // StopIPChange terminate the hunting process
-func (c *Handler) StopIPChange(clientHwAddr net.HardwareAddr) (err error) {
+func (c *Handler) StopIPChange(mac net.HardwareAddr) (err error) {
 	if LogAll {
-		log.WithFields(log.Fields{"mac": clientHwAddr.String()}).Debug("ARP stop IP change")
+		log.WithFields(log.Fields{"mac": mac}).Debug("ARP stop IP change")
 	}
 
-	client := c.FindMAC(clientHwAddr)
+	c.Lock()
+	defer c.Unlock()
+
+	client := c.table.findByMAC(mac)
 	if client == nil {
-		log.WithFields(log.Fields{"mac": clientHwAddr}).Error("ARP mac not found")
-		err = fmt.Errorf("mac %s is not online", clientHwAddr.String())
-		return err
+		if LogAll {
+			log.WithFields(log.Fields{"mac": mac}).Debug("ARP client not found")
+		}
+		return nil
 	}
 
 	if client.State != StateHunt {
 		if LogAll {
-			log.WithFields(log.Fields{"mac": client.MAC.String(), "ip": client.IP}).Debug("ARP client is not in hunt state", client.State)
+			log.WithFields(log.Fields{"mac": mac}).Debugf("ARP client not in hunt state: %s", client.State)
 		}
+		return nil
 	}
 
 	// this will terminate the spoof gorotutine and delete the Virtual MAC
@@ -104,11 +106,11 @@ func (c *Handler) FakeIPConflict(clientHwAddr net.HardwareAddr, clientIP net.IP)
 // The package will detect IP changes automatically however some clients do not
 // send ARP Collision Detection packets and hence do not appear as an immediate change.
 // This method is used to accelerate the change for example when a
-// new DHCP entry has been allocated.
+// new DHCP MACEntry has been allocated.
 //
 func (c *Handler) IPChanged(clientHwAddr net.HardwareAddr, clientIP net.IP) {
 	// Do nothing if we already have this mac and ip
-	if client := c.FindMAC(clientHwAddr); client != nil && client.IP.Equal(clientIP) && client.Online {
+	if client := c.table.findByMAC(clientHwAddr); client != nil && client.findIP(clientIP) != nil && client.Online {
 		return
 	}
 
@@ -122,7 +124,7 @@ func (c *Handler) IPChanged(clientHwAddr net.HardwareAddr, clientIP net.IP) {
 	go func() {
 		for i := 0; i < 5; i++ {
 			time.Sleep(time.Second * 1)
-			if entry := c.FindMAC(clientHwAddr); entry != nil && entry.IP.Equal(clientIP) {
+			if MACEntry := c.table.findByMAC(clientHwAddr); MACEntry != nil && MACEntry.findIP(clientIP) != nil {
 				if LogAll {
 					log.WithFields(log.Fields{"mac": clientHwAddr, "ip": clientIP}).Debug("ARP found mac")
 				}
@@ -146,17 +148,23 @@ func (c *Handler) IPChanged(clientHwAddr net.HardwareAddr, clientIP net.IP) {
 //   1. spoof the client arp table to send router packets to us
 //   2. claim the ownership of the IP
 //
-func (c *Handler) spoofLoop(client *Entry) {
+func (c *Handler) spoofLoop(ctx context.Context) error {
 
-	// Goroutine pool
-	h := c.goroutinePool.Begin("ARP hunt " + client.MAC.String())
-	defer h.End()
+	ticker := time.NewTicker(time.Second * 4).C
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-c.spoofWakeup:
+		case <-ticker:
+		}
 
 	// Virtual Host will exist while this goroutine is running
-	c.mutex.Lock()
-	virtual := c.arpTableAppendLocked(StateVirtualHost, newVirtualHardwareAddr(), client.IP)
-	virtual.Online = true
-	c.mutex.Unlock()
+	c.Lock()
+	for _, ip := range client.IPs {
+	}
+	c.Unlock()
 
 	// Always search for MAC in case it has been deleted.
 	mac := client.MAC
@@ -166,7 +174,7 @@ func (c *Handler) spoofLoop(client *Entry) {
 	log.WithFields(log.Fields{"mac": mac.String(), "ip": virtual.IP}).Infof("ARP claim IP start %v", startTime)
 
 	for {
-		client = c.FindMAC(mac)
+		client = c.table.findByMAC(mac)
 		if h.Stopping() == true || client == nil || client.State != StateHunt {
 			c.deleteVirtualMAC(virtual)
 			newIP := net.IPv4zero

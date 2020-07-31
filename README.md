@@ -55,18 +55,18 @@ listen for ARP changes and generate a notification each time a mac changes betwe
 
 Listen to changes to mac table
 ```golang
-    arpChannel := make(chan arp.Entry, 16)
+    arpChannel := make(chan arp.MACEntry, 16)
 	c.AddNotificationChannel(arpChannel)
 
 	go arpNotification(arpChannel)
 ```
 
 ```golang
-func arpNotification(arpChannel chan arp.Entry) {
+func arpNotification(arpChannel chan arp.MACEntry) {
 	for {
 		select {
-		case entry := <-arpChannel:
-			log.WithFields(log.Fields{"mac": entry.MAC.String(), "ip": entry.IP.String()}).Warnf("notification got ARP entry for %s", entry.MAC)
+		case MACEntry := <-arpChannel:
+			log.WithFields(log.Fields{"mac": MACEntry.MAC.String(), "ip": MACEntry.IP.String()}).Warnf("notification got ARP MACEntry for %s", MACEntry.MAC)
 
 		}
 	}
@@ -75,6 +75,6 @@ func arpNotification(arpChannel chan arp.Entry) {
 
 To force an IP change simply invoke ForceIPChange with the current mac and ip value.
 ```golang
-	entry := c.FindMAC("xx:xx:xx:xx:xx:xx")
-	c.ForceIPChange(entry.MAC, entry.IP)
+	MACEntry := c.findByMAC("xx:xx:xx:xx:xx:xx")
+	c.ForceIPChange(MACEntry.MAC, MACEntry.IP)
 ```

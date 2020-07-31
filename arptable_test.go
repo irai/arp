@@ -17,63 +17,63 @@ var (
 func Test_AddSimple(t *testing.T) {
 
 	h := &Handler{}
-	entry := h.arpTableAppendLocked(StateNormal, mac1, ip1)
+	MACEntry := h.update(StateNormal, mac1, ip1)
 
-	if entry != h.FindMAC(mac1) || entry != h.FindIP(ip1) {
-		t.Error("expected cannot find entry ", mac1.String(), ip1)
+	if MACEntry != h.findByMAC(mac1) || MACEntry != h.findByIP(ip1) {
+		t.Error("expected cannot find MACEntry ", mac1.String(), ip1)
 	}
 }
 
 func Test_AddMany(t *testing.T) {
 
-	h := &Handler{table: make([]*Entry, 0, 256)}
+	h := &Handler{table: make([]*MACEntry, 0, 256)}
 
-	entry := h.arpTableAppendLocked(StateNormal, mac1, ip1)
-	entry2 := h.arpTableAppendLocked(StateNormal, mac2, ip2)
-	entry3 := h.arpTableAppendLocked(StateNormal, mac3, ip3)
+	MACEntry := h.update(StateNormal, mac1, ip1)
+	MACEntry2 := h.update(StateNormal, mac2, ip2)
+	MACEntry3 := h.update(StateNormal, mac3, ip3)
 
-	if len(h.table) != 3 || entry3 != h.FindMAC(mac3) || entry3 != h.FindIP(ip3) {
+	if len(h.table) != 3 || MACEntry3 != h.findByMAC(mac3) || MACEntry3 != h.findByIP(ip3) {
 		h.PrintTable()
-		t.Error("expected cannot find entry ", len(h.table), mac3.String(), ip3)
+		t.Error("expected cannot find MACEntry ", len(h.table), mac3.String(), ip3)
 	}
-	if len(h.table) != 3 || entry2 != h.FindMAC(mac2) || entry2 != h.FindIP(ip2) {
-		t.Error("expected cannot find entry ", mac2.String(), ip2)
+	if len(h.table) != 3 || MACEntry2 != h.findByMAC(mac2) || MACEntry2 != h.findByIP(ip2) {
+		t.Error("expected cannot find MACEntry ", mac2.String(), ip2)
 	}
 
 	h.table[1] = nil
 
-	if len(h.table) != 3 || entry3 != h.FindMAC(mac3) || entry3 != h.FindIP(ip3) {
-		t.Error("expected cannot find entry ", mac3.String(), ip3)
+	if len(h.table) != 3 || MACEntry3 != h.findByMAC(mac3) || MACEntry3 != h.findByIP(ip3) {
+		t.Error("expected cannot find MACEntry ", mac3.String(), ip3)
 	}
 
-	if len(h.table) != 3 || h.FindMAC(mac2) != nil || h.FindIP(ip2) != nil {
-		t.Error("expected cannot find entry ", mac2.String(), ip2)
+	if len(h.table) != 3 || h.findByMAC(mac2) != nil || h.findByIP(ip2) != nil {
+		t.Error("expected cannot find MACEntry ", mac2.String(), ip2)
 	}
 
-	h.arpTableAppendLocked(StateNormal, mac2, ip2)
-	if len(h.table) != 3 || entry != h.FindMAC(mac1) || entry != h.FindIP(ip1) {
+	h.update(StateNormal, mac2, ip2)
+	if len(h.table) != 3 || MACEntry != h.findByMAC(mac1) || MACEntry != h.findByIP(ip1) {
 		h.PrintTable()
-		t.Error("expected cannot find entry ", len(h.table), mac1.String(), ip1)
+		t.Error("expected cannot find MACEntry ", len(h.table), mac1.String(), ip1)
 	}
 }
 func Test_DeleteVirtualMAC(t *testing.T) {
 
-	h := &Handler{table: make([]*Entry, 0, 256)}
-	h.arpTableAppendLocked(StateNormal, mac1, ip1)
-	entry2 := h.arpTableAppendLocked(StateVirtualHost, mac2, ip2)
-	h.arpTableAppendLocked(StateNormal, mac3, ip3)
+	h := &Handler{table: make([]*MACEntry, 0, 256)}
+	h.update(StateNormal, mac1, ip1)
+	MACEntry2 := h.update(StateVirtualHost, mac2, ip2)
+	h.update(StateNormal, mac3, ip3)
 
-	if len(h.table) != 3 || entry2 != h.FindMAC(mac2) || entry2 != h.FindVirtualIP(ip2) {
-		t.Error("expected cannot find entry ", mac2.String(), ip2)
+	if len(h.table) != 3 || MACEntry2 != h.findByMAC(mac2) || MACEntry2 != h.FindVirtualIP(ip2) {
+		t.Error("expected cannot find MACEntry ", mac2.String(), ip2)
 	}
-	h.deleteVirtualMAC(entry2)
+	h.deleteVirtualMAC(MACEntry2)
 
-	if len(h.table) != 3 || h.FindMAC(mac2) != nil || h.FindIP(ip2) != nil {
-		t.Error("expected cannot find entry ", mac2.String(), ip2)
+	if len(h.table) != 3 || h.findByMAC(mac2) != nil || h.findByIP(ip2) != nil {
+		t.Error("expected cannot find MACEntry ", mac2.String(), ip2)
 	}
 
-	entry2 = h.arpTableAppendLocked(StateNormal, mac2, ip2)
-	if len(h.table) != 3 || entry2 != h.FindMAC(mac2) || entry2 != h.FindIP(ip2) {
-		t.Error("expected cannot find entry ", mac2.String(), ip2)
+	MACEntry2 = h.update(StateNormal, mac2, ip2)
+	if len(h.table) != 3 || MACEntry2 != h.findByMAC(mac2) || MACEntry2 != h.findByIP(ip2) {
+		t.Error("expected cannot find MACEntry ", mac2.String(), ip2)
 	}
 }

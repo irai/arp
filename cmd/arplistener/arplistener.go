@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"encoding/binary"
 	"flag"
 	"fmt"
@@ -9,7 +10,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/irai/arp"
 	log "github.com/sirupsen/logrus"
@@ -43,36 +43,33 @@ func main() {
 	}
 	log.Info("Router IP: ", HomeRouterIP, "Home LAN: ", HomeLAN)
 
-	c, err := arp.NewHandler(NIC, HostMAC, HostIP, HomeRouterIP, HomeLAN)
+	ctx, cancel := context.WithCancel(context.Background())
+
+	config := arp.Config{NIC: NIC, HostMAC: HostMAC, HostIP: HostIP, RouterIP: HomeRouterIP, HomeLAN: HomeLAN}
+	c, err := arp.NewHandler(config)
 	if err != nil {
 		log.Fatal("error connection to websocket server", err)
 	}
-	// go c.ListenAndServe(time.Second * 30 * 5)
-	go c.ListenAndServe(0)
+	go c.ListenAndServe(ctx)
 
-	c.Stop()
-
-	c, err = arp.NewHandler(NIC, HostMAC, HostIP, HomeRouterIP, HomeLAN)
-	if err != nil {
-		log.Fatal("error connection to websocket server", err)
-	}
-	go c.ListenAndServe(time.Second * 30 * 5)
-	arpChannel := make(chan arp.Entry, 16)
+	arpChannel := make(chan arp.MACEntry, 16)
 	c.AddNotificationChannel(arpChannel)
 
 	go arpNotification(arpChannel)
 
 	cmd(c)
 
-	c.Stop()
+	cancel()
+
+	c.Close()
 
 }
 
-func arpNotification(arpChannel chan arp.Entry) {
+func arpNotification(arpChannel chan arp.MACEntry) {
 	for {
 		select {
-		case entry := <-arpChannel:
-			log.WithFields(log.Fields{"mac": entry.MAC, "ip": entry.IP}).Warnf("notification got ARP entry for %+v", entry)
+		case MACEntry := <-arpChannel:
+			log.WithFields(log.Fields{"mac": MACEntry.MAC, "ips": MACEntry.IPs}).Warnf("notification got ARP MACEntry for %+v", MACEntry)
 
 		}
 	}
@@ -109,35 +106,37 @@ func cmd(c *arp.Handler) {
 			c.PrintTable()
 			log.SetLevel(l)
 		case 'f':
-			entry := getMAC(c, text)
-			if entry != nil {
-				c.ForceIPChange(entry.MAC, entry.IP)
+			entry, err := getMAC(c, text)
+			if err != nil {
+				log.Error(err)
+				break
 			}
+			c.ForceIPChange(entry.MAC)
 		case 's':
-			entry := getMAC(c, text)
-			if entry != nil {
-				c.StopIPChange(entry.MAC)
+			MACEntry, err := getMAC(c, text)
+			if err != nil {
+				log.Error(err)
+				break
 			}
+			c.StopIPChange(MACEntry.MAC)
 		}
 	}
 }
 
-func getMAC(c *arp.Handler, text string) *arp.Entry {
+func getMAC(c *arp.Handler, text string) (arp.MACEntry, error) {
 	if len(text) <= 3 {
-		log.Error("Invalid MAC")
-		return nil
+		return arp.MACEntry{}, fmt.Errorf("Invalid MAC")
 	}
 	mac, err := net.ParseMAC(text[2:])
 	if err != nil {
-		log.Error("invalid MAC ", err)
-		return nil
+		return arp.MACEntry{}, fmt.Errorf("Invalid MAC: %w", err)
 	}
-	entry := c.FindMAC(mac)
-	if entry == nil {
-		log.Error("Mac not found: ", mac)
-		return nil
+
+	entry, found := c.FindMAC(mac)
+	if !found {
+		return arp.MACEntry{}, fmt.Errorf("MAC not found")
 	}
-	return entry
+	return entry, nil
 }
 
 func getNICInfo(nic string) (ip net.IP, mac net.HardwareAddr, err error) {

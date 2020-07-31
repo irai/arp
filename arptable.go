@@ -10,13 +10,35 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// Entry holds a mac to ip entry
-type Entry struct {
-	MAC        net.HardwareAddr
-	IP         net.IP
-	State      arpState
-	LastUpdate time.Time
-	Online     bool
+// IPMACEntry holds info about each IP
+type IPEntry struct {
+	IP          net.IP
+	MACEntry    *MACEntry
+	LastUpdated time.Time
+}
+
+// MACEntry holds a mac to ip MACEntry
+type MACEntry struct {
+	MAC         net.HardwareAddr
+	IPs         map[string]net.IP
+	State       arpState
+	LastUpdated time.Time
+	Online      bool
+}
+
+func (e *MACEntry) findIP(ip net.IP) net.IP {
+	i, _ := e.IPs[string(ip)]
+	return i
+}
+
+type arpTable struct {
+	macTable map[string]*MACEntry
+	ipTable  map[string]*IPEntry
+}
+
+func newARPTable() *arpTable {
+	t := &arpTable{macTable: make(map[string]*MACEntry, 32), ipTable: make(map[string]*IPEntry)}
+	return t
 }
 
 type arpState string
@@ -32,142 +54,146 @@ const (
 	StateVirtualHost arpState = "virtual"
 )
 
-// PrintTable will print the ARP table to stdout.
-func (c *Handler) PrintTable() {
-	log.Infof("ARP Table: %v entries", len(c.table))
-
-	// Don't mutex lock; it is called from multiple locked locations
-	table := c.table
-	for _, v := range table {
-		if v != nil {
-			log.WithFields(log.Fields{"mac": v.MAC.String(), "ip": v.IP.String()}).
-				Infof("ARP table %5v %10s %18s  %14s  %v", v.Online, v.State, v.MAC, v.IP, time.Since(v.LastUpdate))
-		}
-	}
+// String interface
+func (e *MACEntry) String() {
+	fmt.Sprintf("%5v %10s %18s  %14s  %v", e.Online, e.State, e.MAC, e.IPs, time.Since(e.LastUpdated))
 }
 
-// FindMAC return the entry or nil if not found.
-func (c *Handler) FindMAC(mac net.HardwareAddr) *Entry {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-	return c.findMACLocked(mac)
+func (t *arpTable) findByMAC(mac net.HardwareAddr) *MACEntry {
+	entry, _ := t.macTable[string(mac)]
+	return entry
 }
 
-// findMACLocked
-//
-// CAUTION: Lock the mutex before calling this.
-func (c *Handler) findMACLocked(mac net.HardwareAddr) *Entry {
-	for i := range c.table {
-		if c.table[i] != nil && bytes.Equal(c.table[i].MAC, mac) {
-			return c.table[i]
-		}
-	}
-	return nil
-}
-
-// FindIP return the entry or nil if not found.
-func (c *Handler) FindIP(ip net.IP) *Entry {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-
-	if ip.Equal(net.IPv4zero) {
+// findByIP return the MACEntry or nil if not found.
+func (t *arpTable) findVirtualIP(ip net.IP) *MACEntry {
+	e, _ := t.ipTable[string(ip)]
+	if e == nil || e.MACEntry.State == StateVirtualHost {
 		return nil
 	}
-
-	for i := range c.table {
-		// When in Hunt state, the IP is claimed by a virtual host; ignore the entry
-		if c.table[i] != nil &&
-			c.table[i].IP.Equal(ip) && c.table[i].State != StateVirtualHost {
-			return c.table[i]
-		}
-	}
-	return nil
+	return e.MACEntry
 }
 
-// FindVirtualIP return the entry or nil if not found.
-func (c *Handler) FindVirtualIP(ip net.IP) *Entry {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-
-	for _, entry := range c.table {
-		if entry != nil && entry.State == StateVirtualHost && entry.IP.Equal(ip) {
-			return entry
-		}
+// findVirtualIP return the MACEntry or nil if not found.
+func (t *arpTable) findByIP(ip net.IP) *MACEntry {
+	e, _ := t.ipTable[string(ip)]
+	if e == nil {
+		return nil
 	}
-	return nil
+	return e.MACEntry
 }
 
 // GetTable return a shallow copy of the arp table
-func (c *Handler) GetTable() (table []*Entry) {
-	table = make([]*Entry, 0, len(c.table)) // create an array large enough
-	t := c.table
-	for _, entry := range t {
-		if entry != nil && entry.State != StateVirtualHost {
-			table = append(table, entry)
+func (t *arpTable) getTable() (table []MACEntry) {
+	table = make([]MACEntry, 0, len(t.macTable)) // create an array large enough
+	for _, MACEntry := range t.macTable {
+		if MACEntry != nil && MACEntry.State != StateVirtualHost {
+			table = append(table, *MACEntry)
 		}
 	}
 	return table
 }
 
-// arpTableAppendLocked
-//
-// CAUTION: must be called with the mutex already locked. It has a race condition if not locked.
-//          call c.mutex.Lock() before entering this function
-//
-func (c *Handler) arpTableAppendLocked(state arpState, clientMAC net.HardwareAddr, clientIP net.IP) (ret *Entry) {
-	mac := dupMAC(clientMAC) // copy the underlying slice
-	ip := dupIP(clientIP)    // copy the underlysing slice
+func (t *arpTable) updateIP(e *MACEntry, ip net.IP) (entry *IPEntry, found bool) {
+	e.IPs[string(ip)] = ip
+	e.LastUpdated = time.Now()
 
-	if LogAll {
-		log.WithFields(log.Fields{"ip": ip.String(), "mac": mac.String()}).Debug("ARP new mac detected")
+	found = true
+	ipEntry, _ := t.ipTable[string(ip)]
+	if ipEntry == nil {
+		ipEntry = &IPEntry{IP: ip, LastUpdated: time.Now(), MACEntry: e}
+		t.ipTable[string(ip)] = ipEntry
+		found = false
+	} else {
+		ipEntry.MACEntry = e
+		ipEntry.LastUpdated = e.LastUpdated
 	}
-
-	entry := &Entry{State: state, MAC: mac, IP: ip.To4(), LastUpdate: time.Now(), Online: false}
-
-	// Attempt to reuse deleted entry if available
-	for i := range c.table {
-		if c.table[i] == nil {
-			c.table[i] = entry
-			return entry
-		}
-	}
-
-	// Don't extend table when past the maximum capacity. The initial table
-	// should have plenty of capacity to store all IPs (ie. 256 capacity)
-	// This will cause a buffer rellocation and likely result in pointer errors in
-	// other goroutines.
-	if len(c.table) >= cap(c.table) {
-		log.Error("ARP arptable is too big", len(c.table), cap(c.table))
-		return nil
-	}
-
-	table := c.table // to be safe test array location -  don't want c.table array to change on us
-	c.table = append(c.table, entry)
-	if len(table) > 0 && &c.table[0] != &table[0] {
-		// tell the world if the underlaying array changed.
-		// the logic assume existing pointers will not change
-		log.Error("ARP ERROR new table array allocated", len(c.table), cap(c.table))
-	}
-
-	return entry
+	return ipEntry, found
 }
 
-func (c *Handler) deleteVirtualMAC(virtual *Entry) {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
+func (t *arpTable) upsert(state arpState, mac net.HardwareAddr, ip net.IP) (*MACEntry, bool) {
+	newEntry := false
 
-	for i := range c.table {
-		if c.table[i] != nil && bytes.Equal(c.table[i].MAC, virtual.MAC) && c.table[i].State == StateVirtualHost {
-			if LogAll {
-				log.WithFields(log.Fields{"ip": c.table[i].IP, "mac": c.table[i].MAC.String()}).Debug("ARP deleting virtual mac")
-			}
-			c.table[i] = nil
-			c.PrintTable()
-			return
+	// insert or update mac
+	e, _ := t.macTable[string(mac)]
+	if e == nil {
+		e = &MACEntry{State: state, MAC: mac, IPs: make(map[string]net.IP, 6), LastUpdated: time.Now(), Online: false}
+		t.macTable[string(mac)] = e
+		newEntry = true
+		if LogAll {
+			log.WithFields(log.Fields{"ip": ip, "mac": mac}).Debug("ARP new mac detected")
 		}
+	} else {
+		e.State = state
+		e.LastUpdated = time.Now()
+		e.Online = false
 	}
-	log.WithFields(log.Fields{"ip": virtual.IP, "mac": virtual.MAC.String()}).Error("ARP deleting non-existent virtual mac", *virtual)
-	c.PrintTable()
+
+	if ip == nil {
+		return e, newEntry
+	}
+
+	// insert or update ip
+	ipEntry, _ := t.ipTable[string(ip)]
+	if ipEntry == nil {
+		e.IPs[string(ip)] = ip
+		ipEntry = &IPEntry{IP: ip, LastUpdated: time.Now(), MACEntry: e}
+		t.ipTable[string(ip)] = ipEntry
+	} else {
+		e.IPs[string(ip)] = ip
+		ipEntry.MACEntry = e
+		ipEntry.LastUpdated = time.Now()
+	}
+
+	return e, newEntry
+}
+
+func (t *arpTable) delete(mac net.HardwareAddr) {
+	e, _ := t.macTable[string(mac)]
+	if LogAll {
+		log.WithFields(log.Fields{"mac": mac}).Debugf("ARP delete MACEntry %s", e)
+	}
+	if e == nil {
+		return
+	}
+	ips := e.IPs
+	delete(t.macTable, string(mac))
+	for _, v := range ips {
+		delete(t.ipTable, string(v))
+	}
+}
+
+func (t *arpTable) deleteIP(ip net.IP) {
+	e, _ := t.ipTable[string(ip)]
+	if e == nil {
+		return
+	}
+
+	if LogAll {
+		log.WithFields(log.Fields{"ip": ip}).Debugf("ARP delete ip entry %+v", e)
+	}
+
+	// delete IP from mac table and delete mac entry if last IP
+	delete(e.MACEntry.IPs, string(ip))
+	if len(e.MACEntry.IPs) <= 0 {
+		t.delete(e.MACEntry.MAC)
+	}
+
+	delete(t.ipTable, string(ip))
+}
+
+func (t *arpTable) deleteVirtualMAC(virtual *MACEntry) error {
+
+	entry, _ := t.macTable[string(virtual.MAC)]
+	if entry == nil {
+		return fmt.Errorf("virtual mac does not exist: %v", virtual.MAC)
+	}
+
+	if !bytes.Equal(entry.MAC, virtual.MAC) || entry.State != StateVirtualHost {
+		return fmt.Errorf("failed to delete non virtual mac: %v %v %v", virtual.MAC, entry.MAC, entry.State)
+	}
+
+	delete(t.macTable, string(virtual.MAC))
+	return nil
 }
 
 func newVirtualHardwareAddr() net.HardwareAddr {

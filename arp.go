@@ -128,16 +128,20 @@ func (c *Handler) announceUnicast(mac net.HardwareAddr, ip net.IP, targetMac net
 
 // WhoIs will send a request packet to get the MAC address for the IP. Retry 3 times.
 //
-func (c *Handler) WhoIs(ip net.IP) (entry *Entry, err error) {
+func (c *Handler) WhoIs(ip net.IP) (MACEntry *MACEntry, err error) {
+	c.RLock()
+
 	// test first before sending request; useful for testing
-	if entry = c.FindIP(ip); entry != nil {
-		return entry, nil
+	if MACEntry = c.table.findByIP(ip); MACEntry != nil {
+		return MACEntry, nil
 	}
+	c.RUnlock()
+
 	for i := 0; i < 3; i++ {
 		c.Request(c.config.HostMAC, c.config.HostIP, EthernetBroadcast, ip)
 		time.Sleep(time.Millisecond * 50)
-		if entry = c.FindIP(ip); entry != nil {
-			return entry, nil
+		if MACEntry = c.table.findByIP(ip); MACEntry != nil {
+			return MACEntry, nil
 		}
 	}
 	return nil, nil
