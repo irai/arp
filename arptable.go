@@ -20,15 +20,15 @@ type IPEntry struct {
 // MACEntry holds a mac to ip MACEntry
 type MACEntry struct {
 	MAC         net.HardwareAddr
-	IPs         map[string]net.IP
+	IPs         map[string]IPEntry
 	State       arpState
 	LastUpdated time.Time
 	Online      bool
 }
 
 func (e *MACEntry) findIP(ip net.IP) net.IP {
-	i, _ := e.IPs[string(ip)]
-	return i
+	entry, _ := e.IPs[string(ip)]
+	return entry.IP
 }
 
 type arpTable struct {
@@ -94,8 +94,8 @@ func (t *arpTable) getTable() (table []MACEntry) {
 }
 
 func (t *arpTable) updateIP(e *MACEntry, ip net.IP) (entry *IPEntry, found bool) {
-	e.IPs[string(ip)] = ip
-	e.LastUpdated = time.Now()
+	now := time.Now()
+	e.IPs[string(ip)] = IPEntry{IP: ip, LastUpdated: now}
 
 	found = true
 	ipEntry, _ := t.ipTable[string(ip)]

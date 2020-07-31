@@ -27,14 +27,14 @@ func (c *Handler) scanLoop(ctx context.Context, interval time.Duration) error {
 }
 
 // Probe known macs more often in case they left the network.
-func (c *Handler) probeOnlineLoop(ctx context.Context, duration time.Duration) error {
+func (c *Handler) probeOnlineLoop(ctx context.Context, interval time.Duration) error {
 	ticker := time.NewTicker(time.Second * 30).C
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
 		case <-ticker:
-			refreshCutoff := time.Now().Add(duration * -1)
+			refreshCutoff := time.Now().Add(interval * -1)
 			c.RLock()
 
 			for _, v := range c.table.ipTable {

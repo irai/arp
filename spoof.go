@@ -36,17 +36,14 @@ func (c *Handler) ForceIPChange(mac net.HardwareAddr) error {
 	}
 
 
-	// move all IPs to virtual host
+	// create a virtual host and add IPs to its table
 	virtual, _ := c.table.upsert(StateVirtualHost, newVirtualHardwareAddr(), nil)
 	virtual.Online = true
-	for _, e := range c.ipTable {
-		if e.MACEntry == client {
-e.MACEntry = virtual
-		}
+	for _, ip := range client.IPs {
+		virtual.IPs[string(ip)] = ip
 	}
 
 	client.State = StateHunt
-	client.IPs = []net.IP{}
 
 	return nil
 }
