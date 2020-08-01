@@ -18,7 +18,6 @@ type Config struct {
 	HostMAC                 net.HardwareAddr `yaml:"-"`
 	HostIP                  net.IP           `yaml:"-"`
 	RouterIP                net.IP           `yaml:"-"`
-	RouterMAC               net.HardwareAddr `yaml:"-"`
 	HomeLAN                 net.IPNet        `yaml:"-"`
 	FullNetworkScanInterval time.Duration    `yaml:"-"`
 	OnlineProbeInterval     time.Duration    `yaml:"-"`
@@ -245,7 +244,7 @@ func (c *Handler) ListenAndServe(ctx context.Context) error {
 		}
 
 		// Ignore router and host packets
-		if bytes.Equal(packet.SenderHardwareAddr, c.config.RouterMAC) || bytes.Equal(packet.SenderHardwareAddr, c.config.HostMAC) {
+		if bytes.Equal(packet.SenderIP, c.config.RouterIP) || bytes.Equal(packet.SenderHardwareAddr, c.config.HostMAC) {
 			continue
 		}
 
