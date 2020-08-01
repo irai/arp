@@ -1,6 +1,7 @@
 package arp
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net"
@@ -123,16 +124,10 @@ func (c *Handler) ScanNetwork(ctx context.Context, lan net.IPNet) error {
 	for host := 1; host < 255; host++ {
 		ip[3] = byte(host)
 
-		/***
-		// Skip entries that are online; these will be checked somewhere else
-		//
-		if MACEntry := c.table.findByIP(ip); MACEntry != nil && MACEntry.Online {
-			if Debug {
-				log.WithFields(log.Fields{"mac": MACEntry.MAC, "ip": }).Debug("ARP skip request for online device")
-			}
+		// Don't scan router and host
+		if bytes.Equal(ip, c.config.RouterIP) || bytes.Equal(ip, c.config.HostIP) {
 			continue
 		}
-		***/
 
 		err := c.request(c.config.HostMAC, c.config.HostIP, EthernetBroadcast, ip)
 		if ctx.Err() != nil {
