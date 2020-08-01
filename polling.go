@@ -61,7 +61,7 @@ func (c *Handler) probeOnlineLoop(ctx context.Context, interval time.Duration) e
 
 func (c *Handler) purgeLoop(ctx context.Context, interval time.Duration) error {
 
-	ticker := time.NewTicker(interval).C
+	ticker := time.NewTicker(time.Minute * 1).C
 	for {
 		select {
 		case <-ctx.Done():

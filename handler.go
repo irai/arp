@@ -245,6 +245,11 @@ func (c *Handler) ListenAndServe(ctx context.Context) error {
 			// If new client, then create a MACEntry in table
 			sender, _ = c.table.upsert(StateNormal, dupMAC(packet.SenderHardwareAddr), dupIP(packet.SenderIP))
 			notify++
+		} else {
+			// notify online transition
+			if sender.Online == false {
+				notify++
+			}
 		}
 
 		// Skip packets that we sent as virtual host (i.e. we sent these)

@@ -10,6 +10,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 
@@ -47,7 +48,11 @@ func main() {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	config := arp.Config{NIC: NIC, HostMAC: HostMAC, HostIP: HostIP, RouterIP: HomeRouterIP, HomeLAN: HomeLAN}
+	config := arp.Config{
+		NIC:     NIC,
+		HostMAC: HostMAC, HostIP: HostIP,
+		RouterIP: HomeRouterIP, HomeLAN: HomeLAN,
+		OnlineProbeInterval: time.Minute * 1}
 	c, err := arp.NewHandler(config)
 	if err != nil {
 		log.Fatal("error connection to websocket server", err)
