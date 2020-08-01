@@ -142,7 +142,7 @@ func (t *arpTable) upsert(state arpState, mac net.HardwareAddr, ip net.IP) (entr
 		e = &MACEntry{State: state, MAC: mac, IPs: make(map[string]IPEntry, 6), LastUpdated: now, Online: false}
 		t.macTable[string(mac)] = e
 		if Debug {
-			log.WithFields(log.Fields{"ip": ip, "mac": mac}).Debug("ARP new mac detected")
+			log.Debugf("ARP new mac=%s ip=%s detected", mac, ip)
 		}
 	} else {
 		e.State = state
