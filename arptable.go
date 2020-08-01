@@ -116,8 +116,11 @@ func (e *MACEntry) updateIP(ip net.IP) (entry IPEntry, found bool) {
 	_, ok := e.IPs[string(ip)]
 
 	// If in hunt state, ignore any previous IP
-	if e.State == StateHunt && ok {
-		return IPEntry{}, true
+	if e.State == StateHunt {
+		if ok {
+			return IPEntry{}, true
+		}
+		e.freeIPs() // delete previous IPs
 	}
 
 	now := time.Now()
