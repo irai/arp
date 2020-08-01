@@ -52,7 +52,9 @@ func main() {
 		NIC:     NIC,
 		HostMAC: HostMAC, HostIP: HostIP,
 		RouterIP: HomeRouterIP, HomeLAN: HomeLAN,
-		OnlineProbeInterval: time.Minute * 1}
+		OnlineProbeInterval:     time.Minute * 1,
+		FullNetworkScanInterval: time.Minute * 20,
+		PurgeInterval:           time.Minute * 10}
 	c, err := arp.NewHandler(config)
 	if err != nil {
 		log.Fatal("error connection to websocket server", err)

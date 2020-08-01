@@ -59,7 +59,7 @@ func (c *Handler) probeOnlineLoop(ctx context.Context, interval time.Duration) e
 	}
 }
 
-func (c *Handler) purgeLoop(ctx context.Context, interval time.Duration) error {
+func (c *Handler) purgeLoop(ctx context.Context, offline time.Duration, purge time.Duration) error {
 
 	ticker := time.NewTicker(time.Minute * 1).C
 	for {
@@ -70,8 +70,8 @@ func (c *Handler) purgeLoop(ctx context.Context, interval time.Duration) error {
 		case <-ticker:
 
 			now := time.Now()
-			offlineCutoff := now.Add(interval * -1)        // Mark offline entries last updated before this time
-			deleteCutoff := now.Add(time.Minute * 60 * -1) // Delete entries that have not responded in last hour
+			offlineCutoff := now.Add(offline * -1) // Mark offline entries last updated before this time
+			deleteCutoff := now.Add(purge * -1)    // Delete entries that have not responded in last hour
 			macs := make([]net.HardwareAddr, 0, 16)
 
 			c.Lock()

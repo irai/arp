@@ -21,6 +21,7 @@ type Config struct {
 	HomeLAN                 net.IPNet        `yaml:"-"`
 	FullNetworkScanInterval time.Duration    `yaml:"-"`
 	OnlineProbeInterval     time.Duration    `yaml:"-"`
+	PurgeInterval           time.Duration    `yaml:"-"`
 }
 
 // Handler stores instance variables
@@ -60,11 +61,15 @@ func NewHandler(config Config) (c *Handler, err error) {
 	c.config.HomeLAN = config.HomeLAN
 	c.config.FullNetworkScanInterval = config.FullNetworkScanInterval
 	c.config.OnlineProbeInterval = config.OnlineProbeInterval
+	c.config.PurgeInterval = config.PurgeInterval
 
 	if c.config.FullNetworkScanInterval <= 0 || c.config.FullNetworkScanInterval > time.Hour*12 {
 		c.config.FullNetworkScanInterval = time.Minute * 60
 	}
 	if c.config.OnlineProbeInterval <= 0 || c.config.OnlineProbeInterval > time.Minute*5 {
+		c.config.OnlineProbeInterval = time.Minute * 2
+	}
+	if c.config.PurgeInterval <= c.config.OnlineProbeInterval || c.config.PurgeInterval > time.Hour*3 {
 		c.config.OnlineProbeInterval = time.Minute * 2
 	}
 
@@ -169,7 +174,7 @@ func (c *Handler) ListenAndServe(ctx context.Context) error {
 	// continously check for online-offline transition
 	go func() {
 		wg.Add(1)
-		if err := c.purgeLoop(c.ctx, c.config.OnlineProbeInterval*2); err != nil {
+		if err := c.purgeLoop(c.ctx, c.config.OnlineProbeInterval*2, c.config.PurgeInterval); err != nil {
 			log.Error("ARP ListenAndServer purgeLoop terminated unexpectedly", err)
 		}
 		wg.Done()
