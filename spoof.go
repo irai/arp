@@ -150,7 +150,7 @@ func (c *Handler) spoofLoop(ctx context.Context, client *MACEntry) {
 	startTime := time.Now()
 	nTimes := 0
 	mac := client.MAC
-	log.Infof("ARP claim mac=%s start %v - %s", startTime, client)
+	log.Infof("ARP claim mac=%s start %v - %s", mac, startTime, client)
 	for {
 		c.Lock()
 
