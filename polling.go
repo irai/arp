@@ -72,7 +72,7 @@ func (c *Handler) purgeLoop(ctx context.Context, interval time.Duration) error {
 			now := time.Now()
 			offlineCutoff := now.Add(interval * -1)        // Mark offline entries last updated before this time
 			deleteCutoff := now.Add(time.Minute * 60 * -1) // Delete entries that have not responded in last hour
-			macs := make([]net.HardwareAddr, 16)
+			macs := make([]net.HardwareAddr, 0, 16)
 
 			c.Lock()
 			for _, e := range c.table.macTable {
