@@ -35,8 +35,8 @@ func (c *Handler) probeOnlineLoop(ctx context.Context, interval time.Duration) e
 			return nil
 		case <-ticker:
 			refreshCutoff := time.Now().Add(interval * -1)
-			c.RLock()
 
+			c.RLock()
 			for _, entry := range c.table.macTable {
 				if entry.LastUpdated.Before(refreshCutoff) {
 					// Ignore empty entries and link local
@@ -52,8 +52,9 @@ func (c *Handler) probeOnlineLoop(ctx context.Context, interval time.Duration) e
 						}
 					}
 				}
-				c.RUnlock()
 			}
+			c.RUnlock()
+
 		}
 	}
 }

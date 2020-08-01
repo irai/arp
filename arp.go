@@ -133,6 +133,7 @@ func (c *Handler) WhoIs(ip net.IP) (MACEntry *MACEntry, err error) {
 
 	// test first before sending request; useful for testing
 	if MACEntry = c.table.findByIP(ip); MACEntry != nil {
+		c.RUnlock()
 		return MACEntry, nil
 	}
 	c.RUnlock()

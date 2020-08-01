@@ -55,8 +55,8 @@ func NewHandler(config Config) (c *Handler, err error) {
 	c.table = newARPTable()
 	c.config.NIC = config.NIC
 	c.config.HostMAC = config.HostMAC
-	c.config.HostIP = config.HostIP
-	c.config.RouterIP = config.RouterIP
+	c.config.HostIP = config.HostIP.To4()
+	c.config.RouterIP = config.RouterIP.To4()
 	c.config.HomeLAN = config.HomeLAN
 	c.config.FullNetworkScanInterval = config.FullNetworkScanInterval
 	c.config.OnlineProbeInterval = config.OnlineProbeInterval
@@ -342,6 +342,8 @@ func (c *Handler) ListenAndServe(ctx context.Context) error {
 				}
 			}
 		}
+
+		c.Unlock()
 
 		if notify > 0 {
 			if sender.Online == false {
