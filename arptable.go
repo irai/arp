@@ -56,7 +56,7 @@ const (
 func (e MACEntry) String() string {
 	ips := make([]string, len(e.IPs))
 	for i := range e.IPs {
-		ips = append(ips, e.IPs[i].IP.String())
+		ips = append(ips, fmt.Sprintf("%s (%v)", e.IPs[i].IP, time.Since(e.IPs[i].LastUpdated)))
 	}
 	return fmt.Sprintf("%5v %6s mac=%17s since=%v ips=%v", e.Online, e.State, e.MAC, time.Since(e.LastUpdated), ips)
 }
@@ -115,24 +115,26 @@ func (t *arpTable) getTable() (table []MACEntry) {
 func (e *MACEntry) updateIP(ip net.IP) (entry IPEntry, found bool) {
 	_, ok := e.IPs[string(ip)]
 
-	entry = IPEntry{IP: ip, LastUpdated: time.Now()}
+	now := time.Now()
+	entry = IPEntry{IP: ip, LastUpdated: now}
 	e.IPs[string(ip)] = entry
+	e.LastUpdated = now
 	return entry, ok
 }
 
 func (t *arpTable) upsert(state arpState, mac net.HardwareAddr, ip net.IP) (entry *MACEntry, found bool) {
 
-	// insert or update mac
+	now := time.Now()
 	e, found := t.macTable[string(mac)]
 	if !found {
-		e = &MACEntry{State: state, MAC: mac, IPs: make(map[string]IPEntry, 6), LastUpdated: time.Now(), Online: false}
+		e = &MACEntry{State: state, MAC: mac, IPs: make(map[string]IPEntry, 6), LastUpdated: now, Online: false}
 		t.macTable[string(mac)] = e
 		if Debug {
 			log.WithFields(log.Fields{"ip": ip, "mac": mac}).Debug("ARP new mac detected")
 		}
 	} else {
 		e.State = state
-		e.LastUpdated = time.Now()
+		e.LastUpdated = now
 		e.Online = false
 	}
 
@@ -142,7 +144,7 @@ func (t *arpTable) upsert(state arpState, mac net.HardwareAddr, ip net.IP) (entr
 
 	// replace IP value
 	ipEntry, ok := e.IPs[string(ip)]
-	ipEntry = IPEntry{IP: ip, LastUpdated: time.Now()}
+	ipEntry = IPEntry{IP: ip, LastUpdated: now}
 	e.IPs[string(ip)] = ipEntry
 	if found && ok {
 		return e, true
