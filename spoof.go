@@ -161,7 +161,7 @@ func (c *Handler) spoofLoop(ctx context.Context, client *MACEntry) {
 		c.Lock()
 		// Always search for MAC in case it has been deleted.
 		client := c.table.findByMAC(mac)
-		if client == nil || client.State != StateHunt {
+		if client == nil || client.State != StateHunt || !client.Online {
 			log.Infof("ARP claim end mac=%s repeat=%v duration=%v", mac, nTimes, time.Now().Sub(startTime))
 			c.Unlock()
 			return
