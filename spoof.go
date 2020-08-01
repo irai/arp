@@ -148,7 +148,6 @@ func (c *Handler) spoofLoop(ctx context.Context, client *MACEntry) {
 	for _, v := range client.IPs {
 		virtual.updateIP(v.IP)
 	}
-	client.freeIPs()
 	mac := client.MAC
 	c.Unlock()
 

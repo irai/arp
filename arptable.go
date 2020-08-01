@@ -115,6 +115,11 @@ func (t *arpTable) getTable() (table []MACEntry) {
 func (e *MACEntry) updateIP(ip net.IP) (entry IPEntry, found bool) {
 	_, ok := e.IPs[string(ip)]
 
+	// If in hunt state, ignore any previous IP
+	if e.State == StateHunt && ok {
+		return IPEntry{}, true
+	}
+
 	now := time.Now()
 	entry = IPEntry{IP: ip, LastUpdated: now}
 	e.IPs[string(ip)] = entry
