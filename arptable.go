@@ -122,6 +122,10 @@ func (e *MACEntry) updateIP(ip net.IP) (entry IPEntry, found bool) {
 	return entry, ok
 }
 
+func (e *MACEntry) freeIPs() {
+	e.IPs = make(map[string]IPEntry, 6)
+}
+
 func (t *arpTable) upsert(state arpState, mac net.HardwareAddr, ip net.IP) (entry *MACEntry, found bool) {
 
 	now := time.Now()

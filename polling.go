@@ -38,6 +38,9 @@ func (c *Handler) probeOnlineLoop(ctx context.Context, interval time.Duration) e
 
 			c.RLock()
 			for _, entry := range c.table.macTable {
+				if entry.State == StateVirtualHost || !entry.Online {
+					continue
+				}
 				if entry.LastUpdated.Before(refreshCutoff) {
 					// Ignore empty entries and link local
 					// if e.IP.IsLinkLocalUnicast() {
@@ -78,12 +81,14 @@ func (c *Handler) purgeLoop(ctx context.Context, offline time.Duration, purge ti
 			for _, e := range c.table.macTable {
 
 				// Delete from ARP table if the device was not seen for the last hour
+				// This will delete Virtual hosts too
 				if e.LastUpdated.Before(deleteCutoff) {
 					macs = append(macs, e.MAC)
 					continue
 				}
 
 				// Set offline if no updates since the offline deadline
+				// Virtual hosts are always offline so won't be picked up here
 				if e.Online && e.LastUpdated.Before(offlineCutoff) {
 					log.WithFields(log.Fields{"mac": e.MAC, "ips": e.IPs}).Info("ARP device is offline")
 

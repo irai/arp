@@ -1,6 +1,7 @@
 package arp
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net"
@@ -241,6 +242,11 @@ func (c *Handler) ListenAndServe(ctx context.Context) error {
 					log.Debugf("ARP request received smac=%v sip=%v tmac=%v tip=%v", packet.SenderHardwareAddr, packet.SenderIP, packet.TargetHardwareAddr, packet.TargetIP)
 				}
 			}
+		}
+
+		// Ignore router and host packets
+		if bytes.Equal(packet.SenderHardwareAddr, c.config.RouterMAC) || bytes.Equal(packet.SenderHardwareAddr, c.config.HostMAC) {
+			continue
 		}
 
 		c.Lock()

@@ -22,20 +22,21 @@ func (c *Handler) ForceIPChange(mac net.HardwareAddr) error {
 	}
 
 	c.Lock()
-	defer c.Unlock()
-
 	client := c.table.findByMAC(mac)
 	if client == nil {
 		err := fmt.Errorf("mac %s is not online", mac)
+		c.Unlock()
 		return err
 	}
 
 	if client.State == StateHunt {
 		err := fmt.Errorf("mac %s already in hunt state", mac)
+		c.Unlock()
 		return err
 	}
 
 	client.State = StateHunt
+	c.Unlock()
 	go c.spoofLoop(c.ctx, client)
 
 	return nil
@@ -139,35 +140,34 @@ func (c *Handler) IPChanged(clientHwAddr net.HardwareAddr, clientIP net.IP) {
 //
 func (c *Handler) spoofLoop(ctx context.Context, client *MACEntry) {
 
+	// create a virtual host and move IPs to it
+	// Virtual Host will exist until they get deleted by the purge goroutine
+	c.Lock()
+	virtual, _ := c.table.upsert(StateVirtualHost, newVirtualHardwareAddr(), nil)
+	virtual.Online = false // always keep virtual hosts as offline
+	for _, v := range client.IPs {
+		virtual.updateIP(v.IP)
+	}
+	client.freeIPs()
+	mac := client.MAC
+	c.Unlock()
+
 	// 4 second re-arp seem to be adequate;
 	// Experimented with 300ms but no noticeable improvement other the chatty net.
 	ticker := time.NewTicker(time.Second * 4).C
-
-	// create a virtual host and add IPs to its table
-	// Virtual Host will exist while this goroutine is running
-	virtual, _ := c.table.upsert(StateVirtualHost, newVirtualHardwareAddr(), nil)
-	virtual.Online = true
 	startTime := time.Now()
 	nTimes := 0
-	mac := client.MAC
 	log.Infof("ARP claim mac=%s start %v - %s", mac, startTime, client)
 	for {
 		c.Lock()
-
 		// Always search for MAC in case it has been deleted.
 		client := c.table.findByMAC(mac)
 		if client == nil || client.State != StateHunt {
-			c.table.delete(virtual.MAC)
 			log.Infof("ARP claim end mac=%s repeat=%v duration=%v", mac, nTimes, time.Now().Sub(startTime))
 			c.Unlock()
 			return
 		}
-
-		// update ips - list may have been updated
-		for _, v := range client.IPs {
-			virtual.updateIP(v.IP)
-		}
-
+		virtual.LastUpdated = time.Now()
 		c.Unlock()
 
 		for _, v := range virtual.IPs {
