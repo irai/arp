@@ -150,23 +150,17 @@ func (c *Handler) spoofLoop(ctx context.Context, client *MACEntry) {
 	startTime := time.Now()
 	nTimes := 0
 	mac := client.MAC
+	log.Infof("ARP claim IP start %v - %s", startTime, client)
 	for {
 		c.Lock()
-
-		log.WithFields(log.Fields{"mac": mac}).Infof("ARP claim IP start %v", startTime)
 
 		// Always search for MAC in case it has been deleted.
 		client := c.table.findByMAC(mac)
 		if client == nil || client.State != StateHunt {
 			c.table.delete(virtual.MAC)
-			log.WithFields(log.Fields{"mac": mac, "ips": client.IPs}).Infof("ARP claim IP end repeat=%v duration=%v", nTimes, time.Now().Sub(startTime))
+			log.Infof("ARP claim end mac=%s repeat=%v duration=%v", mac, nTimes, time.Now().Sub(startTime))
 			return
 		}
-
-		if nTimes%16 == 0 {
-			log.WithFields(log.Fields{"mac": mac.String()}).Infof("ARP claim IP repeat=%v duration=%v", nTimes, time.Now().Sub(startTime))
-		}
-		nTimes++
 
 		// update ips - list may have been updated
 		for _, v := range client.IPs {
@@ -185,6 +179,11 @@ func (c *Handler) spoofLoop(ctx context.Context, client *MACEntry) {
 
 			// Use VirtualHost to request ownership of the IP; try to force target to acquire another IP
 			c.forceAnnouncement(virtual.MAC, v.IP)
+
+			if nTimes%16 == 0 {
+				log.Infof("ARP claim mac=%s ip=%s repeat=%v duration=%v", mac, v.IP, nTimes, time.Now().Sub(startTime))
+			}
+			nTimes++
 		}
 
 		select {
