@@ -53,8 +53,21 @@ const (
 )
 
 // String interface
-func (e *MACEntry) String() string {
-	return fmt.Sprintf("%5v %10s %18s  %14s  %v", e.Online, e.State, e.MAC, e.IPs, time.Since(e.LastUpdated))
+func (e MACEntry) String() string {
+	ips := make([]string, len(e.IPs))
+	for i := range e.IPs {
+		ips = append(ips, e.IPs[i].IP.String())
+	}
+	return fmt.Sprintf("%5v %6s mac=%17s since=%v ips=%v", e.Online, e.State, e.MAC, time.Since(e.LastUpdated), ips)
+}
+
+func (t *arpTable) printTable() {
+
+	// Don't lock; it is called from multiple locked locations
+	table := t.macTable
+	for _, v := range table {
+		log.Printf("ARP table %s", v)
+	}
 }
 
 func (t *arpTable) findByMAC(mac net.HardwareAddr) *MACEntry {

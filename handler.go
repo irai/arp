@@ -108,17 +108,8 @@ func (c *Handler) PrintTable() {
 	c.RLock()
 	defer c.RUnlock()
 
-	c.printTable()
-}
-
-func (c *Handler) printTable() {
 	log.Printf("ARP Table: %v entries", len(c.table.macTable))
-
-	// Don't lock; it is called from multiple locked locations
-	table := c.table.macTable
-	for _, v := range table {
-		log.Printf("ARP table %s", v)
-	}
+	c.table.printTable()
 }
 
 // Close will terminate the ListenAndServer goroutine as well as all other pending goroutines.

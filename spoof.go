@@ -126,7 +126,7 @@ func (c *Handler) IPChanged(clientHwAddr net.HardwareAddr, clientIP net.IP) {
 			}
 		}
 		log.WithFields(log.Fields{"mac": clientHwAddr, "ip": clientIP}).Info("ARP could not detect IP")
-		c.printTable()
+		c.table.printTable()
 	}()
 }
 
