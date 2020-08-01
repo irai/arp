@@ -23,7 +23,7 @@ func (c *Handler) ForceIPChange(mac net.HardwareAddr) error {
 
 	c.Lock()
 	client := c.table.findByMAC(mac)
-	if client == nil {
+	if client == nil || !client.Online || client.State == StateVirtualHost {
 		err := fmt.Errorf("mac %s is not online", mac)
 		c.Unlock()
 		return err
