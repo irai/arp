@@ -25,7 +25,7 @@ func main() {
 	flag.Parse()
 
 	arp.Debug = true
-	setLogLevel("info")
+	setLogLevel("debug")
 
 	NIC := *ifaceFlag
 
