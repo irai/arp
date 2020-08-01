@@ -159,6 +159,7 @@ func (c *Handler) spoofLoop(ctx context.Context, client *MACEntry) {
 		if client == nil || client.State != StateHunt {
 			c.table.delete(virtual.MAC)
 			log.Infof("ARP claim end mac=%s repeat=%v duration=%v", mac, nTimes, time.Now().Sub(startTime))
+			c.Unlock()
 			return
 		}
 
