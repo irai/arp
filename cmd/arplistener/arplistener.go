@@ -11,8 +11,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/irai/arp"
 	log "github.com/sirupsen/logrus"
+
+	"github.com/irai/arp"
 )
 
 var (
@@ -42,7 +43,7 @@ func main() {
 	if err != nil {
 		log.Fatal("cannot get default gateway ", err)
 	}
-	log.Info("Router IP: ", HomeRouterIP, "Home LAN: ", HomeLAN)
+	log.Print("Router IP: ", HomeRouterIP, "Home LAN: ", HomeLAN)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -70,8 +71,7 @@ func arpNotification(arpChannel chan arp.MACEntry) {
 	for {
 		select {
 		case MACEntry := <-arpChannel:
-			log.WithFields(log.Fields{"mac": MACEntry.MAC, "ips": MACEntry.IPs}).Warnf("notification got ARP MACEntry for %+v", MACEntry)
-
+			log.Printf("notification got ARP MACEntry for %s", MACEntry)
 		}
 	}
 }
@@ -98,7 +98,7 @@ func cmd(c *arp.Handler) {
 			}
 			err := setLogLevel(text[2:])
 			if err != nil {
-				log.Error("invalid level. valid levels (error, warn, info, debug) ", err)
+				log.Print("invalid level. valid levels (error, warn, info, debug) ", err)
 				break
 			}
 		case 'l':
@@ -109,14 +109,14 @@ func cmd(c *arp.Handler) {
 		case 'f':
 			entry, err := getMAC(c, text)
 			if err != nil {
-				log.Error(err)
+				log.Print(err)
 				break
 			}
 			c.ForceIPChange(entry.MAC)
 		case 's':
 			MACEntry, err := getMAC(c, text)
 			if err != nil {
-				log.Error(err)
+				log.Print(err)
 				break
 			}
 			c.StopIPChange(MACEntry.MAC)
@@ -144,11 +144,11 @@ func getNICInfo(nic string) (ip net.IP, mac net.HardwareAddr, err error) {
 
 	all, err := net.Interfaces()
 	for _, v := range all {
-		log.Debug("interface name ", v.Name, v.HardwareAddr.String())
+		log.Print("interface name ", v.Name, v.HardwareAddr.String())
 	}
 	ifi, err := net.InterfaceByName(nic)
 	if err != nil {
-		log.WithFields(log.Fields{"nic": nic}).Errorf("NIC cannot open nic %s error %s ", nic, err)
+		log.Printf("NIC cannot open nic %s error %s ", nic, err)
 		return ip, mac, err
 	}
 
@@ -156,16 +156,16 @@ func getNICInfo(nic string) (ip net.IP, mac net.HardwareAddr, err error) {
 
 	addrs, err := ifi.Addrs()
 	if err != nil {
-		log.WithFields(log.Fields{"nic": nic}).Errorf("NIC cannot get addresses nic %s error %s ", nic, err)
+		log.Printf("NIC cannot get addresses nic %s error %s ", nic, err)
 		return ip, mac, err
 	}
 
 	for i := range addrs {
 		tmp, _, err := net.ParseCIDR(addrs[i].String())
 		if err != nil {
-			log.WithFields(log.Fields{"nic": nic}).Errorf("NIC cannot parse IP %s error %s ", addrs[i].String(), err)
+			log.Printf("NIC cannot parse IP %s error %s ", addrs[i].String(), err)
 		}
-		log.Info("IP=", tmp)
+		log.Print("IP=", tmp)
 		ip = tmp.To4()
 		if ip != nil && !ip.Equal(net.IPv4zero) {
 			break
@@ -174,11 +174,11 @@ func getNICInfo(nic string) (ip net.IP, mac net.HardwareAddr, err error) {
 
 	if ip == nil || ip.Equal(net.IPv4zero) {
 		err = fmt.Errorf("NIC cannot find IPv4 address list - is %s up?", nic)
-		log.Error(err)
+		log.Print(err)
 		return ip, mac, err
 	}
 
-	log.WithFields(log.Fields{"nic": nic, "ip": ip, "mac": mac}).Info("NIC successfull acquired host nic information")
+	log.Print("NIC successfull acquired host nic information mac=%s ip=%s", mac, ip)
 	return ip, mac, err
 }
 
@@ -213,7 +213,7 @@ func getLinuxDefaultGateway() (gw net.IP, err error) {
 
 	file, err := os.Open(file)
 	if err != nil {
-		log.Error("NIC cannot open route file ", err)
+		log.Print("NIC cannot open route file ", err)
 		return net.IPv4zero, err
 	}
 	defer file.Close()
