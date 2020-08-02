@@ -241,7 +241,7 @@ func (c *Handler) ListenAndServe(ctx context.Context) error {
 
 		// Ignore ACD probes - if this is a probe, the sender IP will be Zeros
 		// do nothing as the sender IP is not valid yet.
-		if packet.Operation == marp.OperationRequest && packet.SenderIP.Equal(net.IPv4zero) {
+		if packet.SenderIP.Equal(net.IPv4zero) {
 			if Debug {
 				log.Debugf("ARP acd probe received smac=%v sip=%v tmac=%v tip=%v", packet.SenderHardwareAddr, packet.SenderIP, packet.TargetHardwareAddr, packet.TargetIP)
 			}
@@ -309,6 +309,7 @@ func (c *Handler) ListenAndServe(ctx context.Context) error {
 
 			switch sender.State {
 			case StateHunt:
+				/***
 				// We are only interested in ARP Address Conflict Detection packets:
 				//
 				// +============+===+===========+===========+============+============+===================+===========+
@@ -320,8 +321,9 @@ func (c *Handler) ListenAndServe(ctx context.Context) error {
 				if !packet.SenderIP.Equal(packet.TargetIP) {
 					break // break the switch
 				}
+				***/
 
-				if _, found := sender.updateIP(dupIP(packet.TargetIP)); found { // is this an existing IP?
+				if _, found := sender.updateIP(dupIP(packet.SenderIP)); found { // is this an existing IP?
 					if Debug {
 						log.WithFields(log.Fields{"mac": sender.MAC, "ip": packet.TargetIP}).Debugf("ARP client attempting to get same IP %s", packet.TargetIP)
 					}
@@ -352,16 +354,12 @@ func (c *Handler) ListenAndServe(ctx context.Context) error {
 		case marp.OperationReply:
 			// Android does not send collision detection request,
 			// we will see a reply instead. Check if the address has changed.
-			if !packet.SenderIP.Equal(net.IPv4zero) {
-				if _, found := sender.updateIP(dupIP(packet.SenderIP)); !found {
-					if Debug {
-						log.Debugf("ARP client state=%v mac=%v updated reply IP to %s", sender.State, sender.MAC, packet.SenderIP)
-					}
-					if sender.State == StateHunt {
-						sender.State = StateNormal
-					}
-					notify++
+			if _, found := sender.updateIP(dupIP(packet.SenderIP)); !found {
+				if Debug {
+					log.Debugf("ARP client state=%v mac=%v updated reply IP to %s", sender.State, sender.MAC, packet.SenderIP)
 				}
+				sender.State = StateNormal // will end hunt goroutine
+				notify++
 			}
 		}
 

@@ -9,19 +9,21 @@ import (
 var (
 	zeroMAC = net.HardwareAddr{0, 0, 0, 0, 0, 0}
 
-	hostMAC  = net.HardwareAddr{0xff, 0xff, 0x03, 0x04, 0x05, 0x01}
-	hostIP   = net.ParseIP("192.168.0.129").To4()
-	homeLAN  = net.IPNet{IP: net.IPv4(192, 168, 0, 0), Mask: net.IPv4Mask(255, 255, 255, 0)}
-	routerIP = net.ParseIP("192.168.0.1").To4()
-	ip2      = net.ParseIP("192.168.0.2").To4()
-	ip3      = net.ParseIP("192.168.0.3").To4()
-	ip4      = net.ParseIP("192.168.0.4").To4()
-	ip5      = net.ParseIP("192.168.0.5").To4()
-	mac1     = net.HardwareAddr{0x01, 0x02, 0x03, 0x04, 0x05, 0x01}
-	mac2     = net.HardwareAddr{0x01, 0x02, 0x03, 0x04, 0x05, 0x02}
-	mac3     = net.HardwareAddr{0x01, 0x02, 0x03, 0x04, 0x05, 0x03}
-	mac4     = net.HardwareAddr{0x01, 0x02, 0x03, 0x04, 0x05, 0x04}
-	mac5     = net.HardwareAddr{0x01, 0x02, 0x03, 0x04, 0x05, 0x05}
+	hostMAC   = net.HardwareAddr{0xff, 0xff, 0x03, 0x04, 0x05, 0x01}
+	hostIP    = net.ParseIP("192.168.0.129").To4()
+	homeLAN   = net.IPNet{IP: net.IPv4(192, 168, 0, 0), Mask: net.IPv4Mask(255, 255, 255, 0)}
+	routerMAC = net.HardwareAddr{0xff, 0xff, 0x03, 0x04, 0x05, 0x02}
+	routerIP  = net.ParseIP("192.168.0.1").To4()
+	ip2       = net.ParseIP("192.168.0.2").To4()
+	ip3       = net.ParseIP("192.168.0.3").To4()
+	ip4       = net.ParseIP("192.168.0.4").To4()
+	ip5       = net.ParseIP("192.168.0.5").To4()
+	mac1      = net.HardwareAddr{0x01, 0x02, 0x03, 0x04, 0x05, 0x01}
+	mac2      = net.HardwareAddr{0x01, 0x02, 0x03, 0x04, 0x05, 0x02}
+	mac3      = net.HardwareAddr{0x01, 0x02, 0x03, 0x04, 0x05, 0x03}
+	mac4      = net.HardwareAddr{0x01, 0x02, 0x03, 0x04, 0x05, 0x04}
+	mac5      = net.HardwareAddr{0x01, 0x02, 0x03, 0x04, 0x05, 0x05}
+	localIP   = net.IPv4(169, 254, 0, 10)
 )
 
 func testHandler(t *testing.T) *Handler {
