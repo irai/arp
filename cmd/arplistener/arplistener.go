@@ -55,7 +55,7 @@ func main() {
 		OnlineProbeInterval:     time.Minute * 1,
 		FullNetworkScanInterval: time.Minute * 20,
 		PurgeInterval:           time.Minute * 10}
-	c, err := arp.NewHandler(config)
+	c, err := arp.New(config)
 	if err != nil {
 		log.Fatal("error connection to websocket server", err)
 	}

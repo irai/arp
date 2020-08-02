@@ -39,9 +39,10 @@ var (
 	Debug bool
 )
 
-// NewHandler creates an ARP handler for a given interface.
-func NewHandler(config Config) (c *Handler, err error) {
-	c = &Handler{}
+// New creates an ARP handler for a given interface.
+func New(config Config) (c *Handler, err error) {
+	c = newHandler(config)
+
 	ifi, err := net.InterfaceByName(config.NIC)
 	if err != nil {
 		return nil, fmt.Errorf("InterfaceByName error: %w", err)
@@ -53,6 +54,11 @@ func NewHandler(config Config) (c *Handler, err error) {
 		return nil, fmt.Errorf("ARP dial error: %w", err)
 	}
 
+	return c, nil
+}
+
+func newHandler(config Config) (c *Handler) {
+	c = &Handler{}
 	c.table = newARPTable()
 	c.config.NIC = config.NIC
 	c.config.HostMAC = config.HostMAC
@@ -78,6 +84,19 @@ func NewHandler(config Config) (c *Handler, err error) {
 			"hostip": c.config.HostIP.String(), "lanrouter": c.config.RouterIP.String()}).Debug("ARP Config")
 	}
 
+	return c
+}
+
+// NewTestHandler allow you to pass a PacketConn. Useful for testing
+func NewTestHandler(config Config, p net.PacketConn) (c *Handler, err error) {
+	c = newHandler(config)
+	ifi, err := net.InterfaceByName(config.NIC)
+	if err != nil {
+		return nil, fmt.Errorf("InterfaceByName error: %w", err)
+	}
+	if c.client, err = marp.New(ifi, p); err != nil {
+		return nil, err
+	}
 	return c, nil
 }
 
@@ -298,7 +317,7 @@ func (c *Handler) ListenAndServe(ctx context.Context) error {
 				// | ACD probe  | 1 | broadcast | clientMAC | clientMAC  | 0x00       | 0x00              |  targetIP |
 				// | ACD announ | 1 | broadcast | clientMAC | clientMAC  | clientIP   | ff:ff:ff:ff:ff:ff |  clientIP |
 				// +============+===+===========+===========+============+============+===================+===========+
-				if packet.SenderIP.Equal(net.IPv4zero) || (!packet.SenderIP.Equal(net.IPv4zero) && !packet.SenderIP.Equal(packet.TargetIP)) {
+				if !packet.SenderIP.Equal(packet.TargetIP) {
 					break // break the switch
 				}
 
@@ -319,9 +338,6 @@ func (c *Handler) ListenAndServe(ctx context.Context) error {
 				notify++
 
 			case StateNormal:
-				if packet.SenderIP.Equal(net.IPv4zero) { // ignore ACD probe
-					break
-				}
 				if _, found := sender.updateIP(dupIP(packet.SenderIP)); !found {
 					if Debug {
 						log.Debugf("ARP client state=%v mac=%v updated IP to %s", sender.State, sender.MAC, packet.TargetIP)
