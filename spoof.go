@@ -11,9 +11,9 @@ import (
 
 // ForceIPChange performs the following:
 //  1. set client state to "hunt" which will continuously spoof the client ARP table
-//  2. create a virtual host to claim the reallocated IP
+//  2. create a virtual host for each IP and claim the IP
 //  3. spoof the client IP to redirect all traffic to host
-//  4. callback when we receive a change of IP for the client
+//  4. notify when client change IP
 //
 // client will revert back to "normal" when a new IP is detected for the MAC
 func (c *Handler) ForceIPChange(mac net.HardwareAddr) error {
@@ -36,8 +36,13 @@ func (c *Handler) ForceIPChange(mac net.HardwareAddr) error {
 	}
 
 	client.State = StateHunt
+	ips := client.IPs()
 	c.Unlock()
-	go c.spoofLoop(c.ctx, client)
+
+	// one virtual mac per IP
+	for _, v := range ips {
+		go c.spoofLoop(c.ctx, client, v)
+	}
 
 	return nil
 }
@@ -138,16 +143,18 @@ func (c *Handler) IPChanged(clientHwAddr net.HardwareAddr, clientIP net.IP) {
 //   1. spoof the client arp table to send router packets to us
 //   2. claim the ownership of the IP
 //
-func (c *Handler) spoofLoop(ctx context.Context, client *MACEntry) {
+func (c *Handler) spoofLoop(ctx context.Context, client *MACEntry, ip net.IP) {
 
 	// create a virtual host and move IPs to it
 	// Virtual Host will exist until they get deleted by the purge goroutine
 	c.Lock()
-	virtual, _ := c.table.upsert(StateVirtualHost, newVirtualHardwareAddr(), nil)
-	virtual.Online = false // always keep virtual hosts as offline
-	for _, v := range client.IPs() {
-		virtual.updateIP(v)
+	if c.table.findVirtualIP(ip) != nil {
+		c.Unlock()
+		return
 	}
+
+	virtual, _ := c.table.upsert(StateVirtualHost, newVirtualHardwareAddr(), ip)
+	virtual.Online = false // always keep virtual hosts as offline
 	mac := client.MAC
 	c.Unlock()
 
@@ -156,35 +163,34 @@ func (c *Handler) spoofLoop(ctx context.Context, client *MACEntry) {
 	ticker := time.NewTicker(time.Second * 4).C
 	startTime := time.Now()
 	nTimes := 0
-	log.Infof("ARP claim mac=%s start %v - %s", mac, startTime, client)
+	log.Infof("ARP claim ip=%s mac=%s client= %s start %v", ip, virtual.MAC, mac, startTime)
 	for {
 		c.Lock()
 		// Always search for MAC in case it has been deleted.
 		client := c.table.findByMAC(mac)
 		if client == nil || client.State != StateHunt {
-			log.Infof("ARP claim end mac=%s repeat=%v duration=%v", mac, nTimes, time.Now().Sub(startTime))
+			log.Infof("ARP claim end ip=%s mac=%s client=%s repeat=%v duration=%v", ip, virtual.MAC, mac, nTimes, time.Now().Sub(startTime))
 			c.Unlock()
 			return
 		}
+
 		virtual.LastUpdated = time.Now()
+
 		c.Unlock()
 
-		for _, v := range virtual.IPs() {
+		// Re-arp target to change router to host so all traffic comes to us
+		// i.e. tell target I am 192.168.0.1
+		//
+		// Use virtual IP as it is guaranteed to not change.
+		c.forceSpoof(mac, ip)
 
-			// Re-arp target to change router to host so all traffic comes to us
-			// i.e. tell target I am 192.168.0.1
-			//
-			// Use virtual IP as it is guaranteed to not change.
-			c.forceSpoof(mac, v)
+		// Use VirtualHost to request ownership of the IP; try to force target to acquire another IP
+		c.forceAnnouncement(virtual.MAC, ip)
 
-			// Use VirtualHost to request ownership of the IP; try to force target to acquire another IP
-			c.forceAnnouncement(virtual.MAC, v)
-
-			if nTimes%16 == 0 {
-				log.Infof("ARP claim mac=%s ip=%s repeat=%v duration=%v", mac, v, nTimes, time.Now().Sub(startTime))
-			}
-			nTimes++
+		if nTimes%16 == 0 {
+			log.Infof("ARP claim ip=%s mac=%s client=%s repeat=%v duration=%v", ip, virtual.MAC, mac, nTimes, time.Now().Sub(startTime))
 		}
+		nTimes++
 
 		select {
 		case <-ctx.Done():
