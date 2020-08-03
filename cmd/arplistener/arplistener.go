@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	log "github.com/sirupsen/logrus"
+	"log"
 
 	"github.com/irai/arp"
 )
@@ -25,8 +25,7 @@ var (
 func main() {
 	flag.Parse()
 
-	arp.Debug = true
-	setLogLevel("debug")
+	arp.Debug = false
 
 	NIC := *ifaceFlag
 
@@ -86,7 +85,7 @@ func arpNotification(arpChannel chan arp.MACEntry) {
 func cmd(c *arp.Handler) {
 	reader := bufio.NewReader(os.Stdin)
 	for {
-		fmt.Println("Command: (q)uit | (l)ist | (f)force <mac> | (s) stop <mac> | (g) loG <level>")
+		fmt.Println("Command: (q)uit | (l)ist | (f)force <mac> | (s) stop <mac> | (g) toggle log")
 		fmt.Print("Enter command: ")
 		text, _ := reader.ReadString('\n')
 		text = strings.ToLower(text[:len(text)-1])
@@ -100,19 +99,13 @@ func cmd(c *arp.Handler) {
 		case 'q':
 			return
 		case 'g':
-			if len(text) < 3 {
-				text = text + "   "
-			}
-			err := setLogLevel(text[2:])
-			if err != nil {
-				log.Print("invalid level. valid levels (error, warn, info, debug) ", err)
-				break
+			if arp.Debug {
+				arp.Debug = false
+			} else {
+				arp.Debug = true
 			}
 		case 'l':
-			l := log.GetLevel()
-			setLogLevel("info") // quick hack to print table
 			c.PrintTable()
-			log.SetLevel(l)
 		case 'f':
 			entry, err := getMAC(c, text)
 			if err != nil {
@@ -185,21 +178,8 @@ func getNICInfo(nic string) (ip net.IP, mac net.HardwareAddr, err error) {
 		return ip, mac, err
 	}
 
-	log.Print("NIC successfull acquired host nic information mac=%s ip=%s", mac, ip)
+	log.Printf("NIC successfull acquired host nic information mac=%s ip=%s", mac, ip)
 	return ip, mac, err
-}
-
-func setLogLevel(level string) (err error) {
-
-	if level != "" {
-		l, err := log.ParseLevel(level)
-		if err != nil {
-			return err
-		}
-		log.SetLevel(l)
-	}
-
-	return nil
 }
 
 const (

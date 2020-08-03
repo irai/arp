@@ -66,7 +66,7 @@ func arpNotification(arpChannel chan arp.MACEntry) {
 	for {
 		select {
 		case MACEntry := <-arpChannel:
-			log.WithFields(log.Fields{"mac": MACEntry.MAC.String(), "ip": MACEntry.IP.String()}).Warnf("notification got ARP MACEntry for %s", MACEntry.MAC)
+			log.Warnf("notification got ARP MACEntry for %s", MACEntry.MAC)
 
 		}
 	}

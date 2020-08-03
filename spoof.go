@@ -6,7 +6,7 @@ import (
 	"net"
 	"time"
 
-	log "github.com/sirupsen/logrus"
+	"log"
 )
 
 // ForceIPChange performs the following:
@@ -18,7 +18,7 @@ import (
 // client will revert back to "normal" when a new IP is detected for the MAC
 func (c *Handler) ForceIPChange(mac net.HardwareAddr) error {
 	if Debug {
-		log.WithFields(log.Fields{"mac": mac}).Debug("ARP capture force IP change")
+		log.Printf("ARP force IP change mac=%s", mac)
 	}
 
 	c.Lock()
@@ -50,7 +50,7 @@ func (c *Handler) ForceIPChange(mac net.HardwareAddr) error {
 // StopIPChange terminate the hunting process
 func (c *Handler) StopIPChange(mac net.HardwareAddr) error {
 	if Debug {
-		log.WithFields(log.Fields{"mac": mac}).Debug("ARP stop IP change")
+		log.Printf("ARP stop IP change mac=%s", mac)
 	}
 
 	c.Lock()
@@ -63,9 +63,9 @@ func (c *Handler) StopIPChange(mac net.HardwareAddr) error {
 	}
 
 	if client.State != StateHunt {
-		err := fmt.Errorf("mac %s not in hunt state", mac)
+		err := fmt.Errorf("not in hunt state mac=%s state=%s", mac, client.State)
 		if Debug {
-			log.WithFields(log.Fields{"mac": mac}).Debugf("ARP client not in hunt state: %s", client.State)
+			log.Printf("ARP %s", err)
 		}
 		return err
 	}
@@ -75,27 +75,6 @@ func (c *Handler) StopIPChange(mac net.HardwareAddr) error {
 	return nil
 }
 
-// FakeIPConflict tricks clients to send a new DHCP request to capture the name.
-// It is used to get the initial client name.
-//
-func (c *Handler) FakeIPConflict(clientHwAddr net.HardwareAddr, clientIP net.IP) {
-	if Debug {
-		log.WithFields(log.Fields{"mac": clientHwAddr.String(), "ip": clientIP.String()}).Debug("ARP fake IP conflict")
-	}
-
-	go func() {
-
-		for i := 0; i < 7; i++ {
-			c.request(c.config.HostMAC, clientIP, EthernetBroadcast, clientIP) // Send ARP announcement
-			time.Sleep(time.Millisecond * 10)
-			// Reply(virtual.MAC, virtual.IP, arpClient.table[i].MAC, virtual.IP) // Send gratuitous ARP reply
-			// Send ARP reply to broadcast MAC
-
-			c.Reply(c.config.HostMAC, clientIP, clientHwAddr, clientIP) // Send gratuitous ARP reply
-		}
-	}()
-}
-
 // IPChanged is used to notify that the IP has changed.
 //
 // The package will detect IP changes automatically however some clients do not
@@ -103,35 +82,35 @@ func (c *Handler) FakeIPConflict(clientHwAddr net.HardwareAddr, clientIP net.IP)
 // This method is used to accelerate the change for example when a
 // new DHCP MACEntry has been allocated.
 //
-func (c *Handler) IPChanged(clientHwAddr net.HardwareAddr, clientIP net.IP) {
+func (c *Handler) IPChanged(mac net.HardwareAddr, clientIP net.IP) {
 	// Do nothing if we already have this mac and ip
-	if client := c.table.findByMAC(clientHwAddr); client != nil && client.Online && client.IP().Equal(clientIP) {
+	if client := c.table.findByMAC(mac); client != nil && client.Online && client.IP().Equal(clientIP) {
 		return
 	}
 
 	if Debug {
-		log.WithFields(log.Fields{"mac": clientHwAddr, "ip": clientIP}).Debug("ARP new mac or ip - validating")
+		log.Printf("ARP new mac=%s - validating", mac)
 	}
 	if err := c.Request(c.config.HostMAC, c.config.HostIP, EthernetBroadcast, clientIP); err != nil {
-		log.WithFields(log.Fields{"mac": clientHwAddr, "ip": clientIP}).Error("ARP request failed", err)
+		log.Printf("ARP request failed mac=%s: %s", mac, err)
 	}
 
 	go func() {
 		for i := 0; i < 5; i++ {
 			time.Sleep(time.Second * 1)
-			if MACEntry := c.table.findByMAC(clientHwAddr); MACEntry != nil && MACEntry.findIP(clientIP) != nil {
+			if entry := c.table.findByMAC(mac); entry != nil && entry.findIP(clientIP) != nil {
 				if Debug {
-					log.WithFields(log.Fields{"mac": clientHwAddr, "ip": clientIP}).Debug("ARP found mac")
+					log.Printf("ARP found mac=%s ips=%s", entry.MAC, entry.IPs())
 				}
 				return
 			}
 
 			// Silent request
 			if err := c.request(c.config.HostMAC, c.config.HostIP, EthernetBroadcast, clientIP); err != nil {
-				log.WithFields(log.Fields{"mac": clientHwAddr, "ip": clientIP}).Error("ARP request 2 failed", err)
+				log.Printf("ARP request 2 failed mac=%s ip=%s: %s", mac, clientIP, err)
 			}
 		}
-		log.WithFields(log.Fields{"mac": clientHwAddr, "ip": clientIP}).Info("ARP could not detect IP")
+		log.Printf("ARP could not detect ip=%s mac=%s", clientIP, mac)
 		c.table.printTable()
 	}()
 }
@@ -168,13 +147,13 @@ func (c *Handler) spoofLoop(ctx context.Context, client *MACEntry, ip net.IP) {
 	ticker := time.NewTicker(time.Second * 4).C
 	startTime := time.Now()
 	nTimes := 0
-	log.Infof("ARP claim ip=%s mac=%s client= %s start %v", ip, virtual.MAC, mac, startTime)
+	log.Printf("ARP claim ip=%s mac=%s client=%s time=%v", ip, virtual.MAC, mac, startTime)
 	for {
 		c.Lock()
 		// Always search for MAC in case it has been deleted.
 		client := c.table.findByMAC(mac)
 		if client == nil || client.State != StateHunt {
-			log.Infof("ARP claim end ip=%s mac=%s client=%s repeat=%v duration=%v", ip, virtual.MAC, mac, nTimes, time.Now().Sub(startTime))
+			log.Printf("ARP claim end ip=%s mac=%s client=%s repeat=%v duration=%v", ip, virtual.MAC, mac, nTimes, time.Now().Sub(startTime))
 			virtual.Online = false // goroutine ended
 			c.Unlock()
 			return
@@ -194,7 +173,7 @@ func (c *Handler) spoofLoop(ctx context.Context, client *MACEntry, ip net.IP) {
 		c.forceAnnouncement(virtual.MAC, ip)
 
 		if nTimes%16 == 0 {
-			log.Infof("ARP claim ip=%s mac=%s client=%s repeat=%v duration=%v", ip, virtual.MAC, mac, nTimes, time.Now().Sub(startTime))
+			log.Printf("ARP claim ip=%s mac=%s client=%s repeat=%v duration=%v", ip, virtual.MAC, mac, nTimes, time.Now().Sub(startTime))
 		}
 		nTimes++
 
@@ -220,7 +199,7 @@ func (c *Handler) forceSpoof(mac net.HardwareAddr, ip net.IP) error {
 	// Unicast announcement - this will not work for all devices but should cause no pain
 	err := c.announceUnicast(c.config.HostMAC, c.config.RouterIP, mac)
 	if err != nil {
-		log.WithFields(log.Fields{"mac": mac.String(), "ip": ip}).Error("ARP error send announcement packet", err)
+		log.Printf("ARP error send announcement packet mac=%s ip=%s: %s", mac, ip, err)
 		return err
 	}
 
@@ -228,7 +207,7 @@ func (c *Handler) forceSpoof(mac net.HardwareAddr, ip net.IP) error {
 	for i := 0; i < 2; i++ {
 		err = c.reply(c.config.HostMAC, c.config.RouterIP, mac, ip)
 		if err != nil {
-			log.WithFields(log.Fields{"mac": mac.String(), "ip": ip}).Error("ARP spoof client error", err)
+			log.Printf("ARP error spoof client mac=%s ip=%s: %s", mac, ip, err)
 			return err
 		}
 		time.Sleep(time.Millisecond * 10)
@@ -241,14 +220,14 @@ func (c *Handler) forceSpoof(mac net.HardwareAddr, ip net.IP) error {
 func (c *Handler) forceAnnouncement(mac net.HardwareAddr, ip net.IP) error {
 	err := c.announce(mac, ip)
 	if err != nil {
-		log.WithFields(log.Fields{"mac": mac.String(), "ip": ip}).Error("ARP error send announcement packet", err)
+		log.Printf("ARP error send announcement packet mac=%s ip=%s: %s", mac, ip, err)
 	}
 
 	// Send 4 gratuitous ARP reply : Log the first one only
 	err = c.Reply(mac, ip, EthernetBroadcast, ip) // Send gratuitous ARP reply
 	for i := 0; i < 3; i++ {
 		if err != nil {
-			log.WithFields(log.Fields{"mac": mac.String(), "ip": ip}).Error("ARP error send gratuitous packet", err)
+			log.Printf("ARP error send gratuitous packet mac=%s ip=%s: %s", mac, ip, err)
 		}
 		time.Sleep(time.Millisecond * 10)
 

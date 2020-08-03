@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	log "github.com/sirupsen/logrus"
+	"log"
 
 	marp "github.com/mdlayher/arp"
 )
@@ -49,10 +49,10 @@ func addNotification(ctx context.Context, h *Handler) *notificationCounter {
 			case entry := <-channel:
 				if entry.Online {
 					n.onlineCounter++
-					log.Print("online", entry.String(), n.onlineCounter)
+					// log.Print("got notification online", entry.String(), n.onlineCounter)
 				} else {
 					n.offlineCounter++
-					log.Print("offline", entry.String(), n.offlineCounter)
+					// log.Print("got notification offline", entry.String(), n.offlineCounter)
 				}
 			}
 		}

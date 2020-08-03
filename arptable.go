@@ -6,7 +6,7 @@ import (
 	"net"
 	"time"
 
-	log "github.com/sirupsen/logrus"
+	"log"
 )
 
 // IPEntry holds info about each IP
@@ -81,7 +81,7 @@ func (e MACEntry) String() string {
 	// for i := range e.ipArray {
 	// ips = append(ips, fmt.Sprintf("%s (%v)", e.ipArray[i].IP, time.Since(e.ipArray[i].LastUpdated)))
 	// }
-	return fmt.Sprintf("%5v %6s mac=%17s since=%v ips=%v", e.Online, e.State, e.MAC, time.Since(e.LastUpdated), e.IPs())
+	return fmt.Sprintf("%6v %6s mac=%17s since=%v ips=%v", e.Online, e.State, e.MAC, time.Since(e.LastUpdated), e.IPs())
 }
 
 func (t *arpTable) printTable() {
@@ -176,7 +176,7 @@ func (t *arpTable) upsert(state arpState, mac net.HardwareAddr, ip net.IP) (entr
 		e = &MACEntry{State: state, MAC: mac, LastUpdated: now, Online: false}
 		t.macTable[string(mac)] = e
 		if Debug {
-			log.Debugf("ARP new mac=%s ip=%s state=%s created", mac, ip, state)
+			log.Printf("ARP new mac=%s ip=%s state=%s created", mac, ip, state)
 		}
 	} else {
 		e.State = state
@@ -199,7 +199,7 @@ func (t *arpTable) upsert(state arpState, mac net.HardwareAddr, ip net.IP) (entr
 func (t *arpTable) delete(mac net.HardwareAddr) {
 	e, _ := t.macTable[string(mac)]
 	if Debug {
-		log.WithFields(log.Fields{"mac": mac}).Debugf("ARP delete MACEntry %s", e)
+		log.Printf("ARP delete MACEntry entry=%s", e)
 	}
 	if e == nil {
 		return

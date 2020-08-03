@@ -7,7 +7,7 @@ import (
 	"net"
 	"time"
 
-	log "github.com/sirupsen/logrus"
+	"log"
 )
 
 // pollingLoop detect new IPs on the network
@@ -53,10 +53,10 @@ func (c *Handler) probeOnlineLoop(ctx context.Context, interval time.Duration) e
 					// }
 					for _, v := range entry.IPs() {
 						if Debug {
-							log.Debugf("ARP is %s online? mac=%s", v, entry.MAC)
+							log.Printf("ARP is %s online? mac=%s", v, entry.MAC)
 						}
 						if err := c.request(c.config.HostMAC, c.config.HostIP, entry.MAC, v); err != nil {
-							log.WithFields(log.Fields{"mac": entry.MAC, "ip": v}).Error("Error ARP request: ", err)
+							log.Printf("Error ARP request mac=%s ip=%s: %s ", entry.MAC, v, err)
 						}
 					}
 				}
@@ -99,7 +99,7 @@ func (c *Handler) purgeLoop(ctx context.Context, offline time.Duration, purge ti
 				// Set offline if no updates since the offline deadline
 				// Ignore virtual hosts; offline controlled by spoofing goroutine
 				if e.State != StateVirtualHost && e.Online && e.LastUpdated.Before(offlineCutoff) {
-					log.WithFields(log.Fields{"mac": e.MAC, "ips": e.IPs()}).Info("ARP device is offline")
+					log.Printf("ARP mac=%s is offline ips=%s", e.MAC, e.IPs())
 
 					e.Online = false
 					e.State = StateNormal // Stop hunt if in progress
@@ -127,7 +127,7 @@ func (c *Handler) ScanNetwork(ctx context.Context, lan net.IPNet) error {
 	ip := lan.IP.To4()
 
 	if Debug {
-		log.Debugf("ARP Discovering IP - sending 254 ARP requests - lan %v", lan)
+		log.Printf("ARP Discovering IP - sending 254 ARP requests - lan %v", lan)
 	}
 	for host := 1; host < 255; host++ {
 		ip[3] = byte(host)
@@ -144,14 +144,14 @@ func (c *Handler) ScanNetwork(ctx context.Context, lan net.IPNet) error {
 		if err != nil {
 			if err1, ok := err.(net.Error); ok && err1.Temporary() {
 				if Debug {
-					log.Debug("ARP error in read socket is temporary - retry", err1)
+					log.Print("ARP error in read socket is temporary - retry", err1)
 				}
 				time.Sleep(time.Millisecond * 100) // Wait before retrying
 				continue
 			}
 
 			if Debug {
-				log.Error("ARP request error ", err)
+				log.Print("ARP request error ", err)
 			}
 			return err
 		}

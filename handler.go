@@ -8,8 +8,9 @@ import (
 	"sync"
 	"time"
 
+	"log"
+
 	marp "github.com/mdlayher/arp"
-	log "github.com/sirupsen/logrus"
 )
 
 // Config holds configuration parameters
@@ -23,6 +24,11 @@ type Config struct {
 	ProbeInterval           time.Duration    `yaml:"-"` // how often to probe if IP is online
 	OfflineDeadline         time.Duration    `yaml:"-"` // mark offline if more than OfflineInte
 	PurgeDeadline           time.Duration    `yaml:"-"`
+}
+
+func (c Config) String() string {
+	return fmt.Sprintf("hostmac=%s hostIP=%s routerIP=%s homeLAN=%s scan=%v probe=%s offline=%v purge=%v",
+		c.HostMAC, c.HostIP, c.RouterIP, c.HomeLAN, c.FullNetworkScanInterval, c.ProbeInterval, c.OfflineDeadline, c.PurgeDeadline)
 }
 
 // Handler stores instance variables
@@ -85,8 +91,7 @@ func newHandler(config Config) (c *Handler) {
 	}
 
 	if Debug {
-		log.WithFields(log.Fields{"hostinterface": c.config.NIC, "hostmac": c.config.HostMAC.String(),
-			"hostip": c.config.HostIP.String(), "lanrouter": c.config.RouterIP.String()}).Debug("ARP Config")
+		log.Printf("ARP Config %s", c.config)
 	}
 
 	return c
@@ -168,12 +173,12 @@ func (c *Handler) ListenAndServe(ctx context.Context) error {
 	go func() {
 		wg.Add(1)
 		if err := c.scanLoop(c.ctx, c.config.FullNetworkScanInterval); err != nil {
-			log.Error("ARP goroutine scanLoop terminated unexpectedly", err)
+			log.Print("ARP goroutine scanLoop terminated unexpectedly", err)
 		}
 		wg.Done()
 		c.Close()
 		if Debug {
-			log.Debug("ARP goroutine scanLoop ended")
+			log.Print("ARP goroutine scanLoop ended")
 		}
 	}()
 
@@ -181,12 +186,12 @@ func (c *Handler) ListenAndServe(ctx context.Context) error {
 	go func() {
 		wg.Add(1)
 		if err := c.probeOnlineLoop(c.ctx, c.config.ProbeInterval); err != nil {
-			log.Error("ARP goroutine probeOnlineLoop terminated unexpectedly", err)
+			log.Print("ARP goroutine probeOnlineLoop terminated unexpectedly", err)
 		}
 		wg.Done()
 		c.Close()
 		if Debug {
-			log.Debug("ARP goroutine probeOnlineLoop ended")
+			log.Print("ARP goroutine probeOnlineLoop ended")
 		}
 	}()
 
@@ -194,12 +199,12 @@ func (c *Handler) ListenAndServe(ctx context.Context) error {
 	go func() {
 		wg.Add(1)
 		if err := c.purgeLoop(c.ctx, c.config.OfflineDeadline, c.config.PurgeDeadline); err != nil {
-			log.Error("ARP ListenAndServer purgeLoop terminated unexpectedly", err)
+			log.Print("ARP ListenAndServer purgeLoop terminated unexpectedly", err)
 		}
 		wg.Done()
 		c.Close()
 		if Debug {
-			log.Debug("ARP goroutine purgeLoop ended")
+			log.Print("ARP goroutine purgeLoop ended")
 		}
 	}()
 
@@ -215,20 +220,20 @@ func (c *Handler) ListenAndServe(ctx context.Context) error {
 			cancel()
 			wg.Wait()
 			if Debug {
-				log.Debug("ARP goroutine purgeLoop ended")
+				log.Print("ARP goroutine purgeLoop ended")
 			}
 			return nil
 		}
 		if err != nil {
 			if err1, ok := err.(net.Error); ok && err1.Temporary() {
 				if Debug {
-					log.Debug("ARP read error is temporary - retry", err1)
+					log.Print("ARP read error is temporary - retry", err1)
 				}
 				time.Sleep(time.Millisecond * 30) // Wait a few seconds before retrying
 				continue
 			}
 			if Debug {
-				log.Error("ARP read error ", err)
+				log.Print("ARP read error ", err)
 			}
 			cancel()
 			wg.Wait()
@@ -241,7 +246,7 @@ func (c *Handler) ListenAndServe(ctx context.Context) error {
 		if packet.SenderIP.IsLinkLocalUnicast() ||
 			packet.TargetIP.IsLinkLocalUnicast() {
 			if Debug {
-				log.Debugf("ARP skipping link local packet smac=%v sip=%v tmac=%v tip=%v", packet.SenderHardwareAddr, packet.SenderIP, packet.TargetHardwareAddr, packet.TargetIP)
+				log.Printf("ARP skipping link local packet smac=%v sip=%v tmac=%v tip=%v", packet.SenderHardwareAddr, packet.SenderIP, packet.TargetHardwareAddr, packet.TargetIP)
 			}
 			continue
 		}
@@ -250,7 +255,7 @@ func (c *Handler) ListenAndServe(ctx context.Context) error {
 		// do nothing as the sender IP is not valid yet.
 		if packet.SenderIP.Equal(net.IPv4zero) {
 			if Debug {
-				log.Debugf("ARP acd probe received smac=%v sip=%v tmac=%v tip=%v", packet.SenderHardwareAddr, packet.SenderIP, packet.TargetHardwareAddr, packet.TargetIP)
+				log.Printf("ARP acd probe received smac=%v sip=%v tmac=%v tip=%v", packet.SenderHardwareAddr, packet.SenderIP, packet.TargetHardwareAddr, packet.TargetIP)
 			}
 			continue // continue the for loop
 		}
@@ -258,13 +263,13 @@ func (c *Handler) ListenAndServe(ctx context.Context) error {
 		if Debug {
 			switch {
 			case packet.Operation == marp.OperationReply:
-				log.Debugf("ARP reply received smac=%v sip=%v tmac=%v tip=%v", packet.SenderHardwareAddr, packet.SenderIP, packet.TargetHardwareAddr, packet.TargetIP)
+				log.Printf("ARP reply received smac=%v sip=%v tmac=%v tip=%v", packet.SenderHardwareAddr, packet.SenderIP, packet.TargetHardwareAddr, packet.TargetIP)
 			case packet.Operation == marp.OperationReply:
 				switch {
 				case packet.SenderIP.Equal(packet.TargetIP):
-					log.Debugf("ARP announcement received smac=%v sip=%v tmac=%v tip=%v", packet.SenderHardwareAddr, packet.SenderIP, packet.TargetHardwareAddr, packet.TargetIP)
+					log.Printf("ARP announcement received smac=%v sip=%v tmac=%v tip=%v", packet.SenderHardwareAddr, packet.SenderIP, packet.TargetHardwareAddr, packet.TargetIP)
 				default:
-					log.Debugf("ARP request received smac=%v sip=%v tmac=%v tip=%v", packet.SenderHardwareAddr, packet.SenderIP, packet.TargetHardwareAddr, packet.TargetIP)
+					log.Printf("ARP request received smac=%v sip=%v tmac=%v tip=%v", packet.SenderHardwareAddr, packet.SenderIP, packet.TargetHardwareAddr, packet.TargetIP)
 				}
 			}
 		}
@@ -305,7 +310,7 @@ func (c *Handler) ListenAndServe(ctx context.Context) error {
 			if target := c.table.findVirtualIP(packet.TargetIP); target != nil {
 				mac := target.MAC
 				if Debug {
-					log.Debugf("ARP sending reply for virtual ip=%s smac=%v sip=%v tmac=%v",
+					log.Printf("ARP sending reply for virtual ip=%s smac=%v sip=%v tmac=%v",
 						packet.TargetIP, packet.SenderHardwareAddr, packet.SenderIP, packet.TargetHardwareAddr)
 				}
 				c.Unlock()
@@ -332,7 +337,7 @@ func (c *Handler) ListenAndServe(ctx context.Context) error {
 
 				if _, found := sender.updateIP(dupIP(packet.SenderIP)); found { // is this an existing IP?
 					if Debug {
-						log.WithFields(log.Fields{"mac": sender.MAC, "ip": packet.TargetIP}).Debugf("ARP client attempting to get same IP %s", packet.TargetIP)
+						log.Printf("ARP client attempting to get same ip=%s mac=%s ips=%s", packet.TargetIP, sender.MAC, sender.IPs())
 					}
 					break // break the switch
 				}
@@ -342,20 +347,20 @@ func (c *Handler) ListenAndServe(ctx context.Context) error {
 				//
 				sender.State = StateNormal
 				if Debug {
-					log.Debugf("ARP client state=%v mac=%v updated IP to %s", StateHunt, sender.MAC, packet.TargetIP)
+					log.Printf("ARP client state=%v mac=%v updated IP to %s", StateHunt, sender.MAC, packet.TargetIP)
 				}
 				notify++
 
 			case StateNormal:
 				if _, found := sender.updateIP(dupIP(packet.SenderIP)); !found {
 					if Debug {
-						log.Debugf("ARP client state=%v mac=%v updated IP to %s", sender.State, sender.MAC, packet.TargetIP)
+						log.Printf("ARP client state=%v mac=%v updated IP to %s", sender.State, sender.MAC, packet.TargetIP)
 					}
 					notify++
 				}
 
 			default:
-				log.Error("ARP unexpected client state in request =", sender.State)
+				log.Print("ARP unexpected client state in request =", sender.State)
 			}
 
 		case marp.OperationReply:
@@ -363,7 +368,7 @@ func (c *Handler) ListenAndServe(ctx context.Context) error {
 			// we will see a reply instead. Check if the address has changed.
 			if _, found := sender.updateIP(dupIP(packet.SenderIP)); !found {
 				if Debug {
-					log.Debugf("ARP client state=%v mac=%v updated reply IP to %s", sender.State, sender.MAC, packet.SenderIP)
+					log.Printf("ARP client state=%v mac=%v updated reply IP to %s", sender.State, sender.MAC, packet.SenderIP)
 				}
 				sender.State = StateNormal // will end hunt goroutine
 				notify++
@@ -375,9 +380,9 @@ func (c *Handler) ListenAndServe(ctx context.Context) error {
 		if notify > 0 {
 			if sender.Online == false {
 				sender.Online = true
-				log.WithFields(log.Fields{"mac": sender.MAC, "ip": packet.SenderIP, "state": sender.State}).Info("ARP device is online")
+				log.Printf("ARP mac=%s is online ip=%s state=%s", sender.MAC, packet.SenderIP, sender.State)
 			} else {
-				log.WithFields(log.Fields{"mac": sender.MAC, "ip": packet.SenderIP, "state": sender.State}).Info("ARP device changed IP")
+				log.Printf("ARP mac=%s changed IP ip=%s state=%s", sender.MAC, packet.SenderIP, sender.State)
 			}
 
 			if c.notification != nil {

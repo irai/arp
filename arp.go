@@ -4,8 +4,9 @@ import (
 	"net"
 	"time"
 
+	"log"
+
 	marp "github.com/mdlayher/arp"
-	log "github.com/sirupsen/logrus"
 )
 
 var (
@@ -50,9 +51,9 @@ func (c *Handler) request(srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr ne
 func (c *Handler) Request(srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr net.HardwareAddr, dstIP net.IP) error {
 	if Debug {
 		if srcIP.Equal(dstIP) {
-			log.WithFields(log.Fields{"srcmac": srcHwAddr, "srcip": srcIP, "dstmac": dstHwAddr, "dstip": dstIP}).Debugf("ARP send announcement - I am %s", dstIP)
+			log.Printf("ARP send announcement - I am ip=%s mac=%s", srcIP, srcHwAddr)
 		} else {
-			log.WithFields(log.Fields{"srcmac": srcHwAddr, "srcip": srcIP, "dstmac": dstHwAddr, "dstip": dstIP}).Debugf("ARP send request - who is %s", dstIP)
+			log.Printf("ARP send request - who is ip=%s tell sip=%s smac=%s", dstIP, srcIP, srcHwAddr)
 		}
 	}
 
@@ -64,7 +65,7 @@ func (c *Handler) Request(srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr ne
 // Call with dstHwAddr = ethernet.Broadcast to reply to all
 func (c *Handler) Reply(srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr net.HardwareAddr, dstIP net.IP) error {
 	if Debug {
-		log.WithFields(log.Fields{"dstmac": dstHwAddr.String(), "dstip": dstIP.String()}).Debugf("ARP send reply - host %s is at %s", srcIP.String(), srcHwAddr.String())
+		log.Printf("ARP send reply - ip=%s is at mac=%s", srcIP, srcHwAddr)
 	}
 	return c.reply(srcHwAddr, srcIP, dstHwAddr, dstIP)
 }

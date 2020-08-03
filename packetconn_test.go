@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	log "github.com/sirupsen/logrus"
+	"log"
 )
 
 func Test_bufferedPacketConn_ReadFrom(t *testing.T) {
@@ -18,7 +18,7 @@ func Test_bufferedPacketConn_ReadFrom(t *testing.T) {
 	recvd := make([]byte, 256)
 	c.ReadFrom(recvd)
 	if bytes.Equal(sent, recvd) {
-		log.Error("error in size ", sent, recvd)
+		log.Print("error in size ", sent, recvd)
 	}
 
 	go func() {
@@ -28,7 +28,7 @@ func Test_bufferedPacketConn_ReadFrom(t *testing.T) {
 
 	c.ReadFrom(recvd)
 	if bytes.Equal(sent2, recvd) {
-		log.Error("error in size ", sent2, recvd)
+		log.Print("error in size ", sent2, recvd)
 	}
 
 }
