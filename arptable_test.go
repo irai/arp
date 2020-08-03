@@ -95,3 +95,69 @@ func Test_Delete(t *testing.T) {
 		t.Error("expected cannot find MACEntry ", mac2.String(), ip2)
 	}
 }
+
+func Test_DuplicateIP(t *testing.T) {
+	h := testHandler(t)
+	e, _ := h.table.upsert(StateNormal, mac1, ip2)
+	e.Online = true
+	e.updateIP(ip3)
+	if !e.IP().Equal(ip3) && len(e.IPs()) != 2 {
+		t.Fatal("expected ip3 ", e.IP())
+	}
+	e.updateIP(ip2)
+	if !e.IP().Equal(ip2) && len(e.IPs()) != 3 {
+		t.Fatal("expected ip2-2 ", e.IP())
+	}
+	e.updateIP(ip4)
+	if !e.IP().Equal(ip4) && len(e.IPs()) != 4 {
+		t.Fatal("expected ip2 ", e.IP())
+	}
+	e.updateIP(ip5)
+	if !e.IP().Equal(ip5) && len(e.IPs()) != 4 {
+		t.Fatal("expected ip5 ", e.IP())
+	}
+	e.updateIP(ip2)
+	if !e.IP().Equal(ip2) && len(e.IPs()) != 4 {
+		t.Fatal("expected ip2-2 ", e.IP())
+	}
+
+	if !e.ipArray[0].IP.Equal(ip2) || !e.ipArray[1].IP.Equal(ip5) || !e.ipArray[2].IP.Equal(ip4) || !e.ipArray[3].IP.Equal(ip2) {
+		t.Fatal("invalid IPs", e.IPs())
+	}
+}
+func Test_HuntIP(t *testing.T) {
+	h := testHandler(t)
+	e, _ := h.table.upsert(StateNormal, mac1, ip2)
+	e.updateIP(ip3)
+	e.Online = true
+	e.State = StateHunt
+
+	e.updateIP(ip3)
+	if !e.IP().Equal(ip3) && len(e.IPs()) != 2 {
+		t.Fatal("expected ip3 ", e.IP())
+	}
+	e.updateIP(ip2)
+	if !e.IP().Equal(ip3) && len(e.IPs()) != 2 {
+		t.Fatal("expected ip2 ", e.IP())
+	}
+	e.updateIP(ip4)
+	if !e.IP().Equal(ip4) && len(e.IPs()) != 3 {
+		t.Fatal("expected ip4 ", e.IP())
+	}
+	e.updateIP(ip2)
+	if !e.IP().Equal(ip4) && len(e.IPs()) != 3 {
+		t.Fatal("expected ip2-2 ", e.IP())
+	}
+	e.updateIP(ip5)
+	if !e.IP().Equal(ip5) && len(e.IPs()) != 4 {
+		t.Fatal("expected ip5 ", e.IP())
+	}
+	e.updateIP(ip3)
+	if !e.IP().Equal(ip3) && len(e.IPs()) != 4 {
+		t.Fatal("expected ip3-2 ", e.IP())
+	}
+
+	if !e.ipArray[0].IP.Equal(ip5) || !e.ipArray[1].IP.Equal(ip4) || !e.ipArray[2].IP.Equal(ip3) || !e.ipArray[3].IP.Equal(ip2) {
+		t.Fatal("invalid IPs", e.IPs())
+	}
+}

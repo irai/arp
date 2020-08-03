@@ -200,9 +200,11 @@ func Test_CaptureSameIP(t *testing.T) {
 		{"request2-1", newPacket(marp.OperationRequest, mac2, ip2, zeroMAC, routerIP), nil, 3, 1, StateHunt},
 		{"request2-2", newPacket(marp.OperationRequest, mac2, ip2, zeroMAC, hostIP), nil, 3, 1, StateHunt},
 		{"request2-4", newPacket(marp.OperationRequest, mac2, ip2, mac3, ip3), nil, 3, 1, StateHunt},
-		{"request3-1", newPacket(marp.OperationRequest, mac2, ip3, zeroMAC, hostIP), nil, 3, 1, StateNormal},
-		{"request4-1", newPacket(marp.OperationRequest, mac2, ip4, zeroMAC, hostIP), nil, 3, 2, StateNormal},
+		{"request3-1", newPacket(marp.OperationRequest, mac2, ip3, zeroMAC, hostIP), nil, 3, 2, StateNormal},
 		{"request3-2", newPacket(marp.OperationRequest, mac2, ip2, zeroMAC, ip2), nil, 3, 2, StateNormal}, // announce old IP
+		{"request4-1", newPacket(marp.OperationRequest, mac2, ip4, zeroMAC, hostIP), nil, 3, 3, StateNormal},
+		{"request5-1", newPacket(marp.OperationRequest, mac2, ip5, zeroMAC, hostIP), nil, 3, 4, StateNormal},
+		{"request3-3", newPacket(marp.OperationRequest, mac2, ip2, zeroMAC, ip2), nil, 3, 4, StateNormal}, // announce old IP
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -216,7 +218,8 @@ func Test_CaptureSameIP(t *testing.T) {
 			if tt.wantIPs != 0 {
 				e := h.table.findByMAC(tt.packet.SenderHardwareAddr)
 				if e == nil || len(e.IPs()) != tt.wantIPs {
-					t.Errorf("Test_catpureSameIP:%s table IP entry=%+v, wantLen %v", tt.name, e, tt.wantLen)
+					t.Errorf("Test_catpureSameIP:%s table IP entry=%+v, wantLen %v", tt.name, e, tt.wantIPs)
+					h.PrintTable()
 				}
 				if e.State != tt.wantState {
 					t.Errorf("Test_captureSameIP:%s entry state=%s, wantState %v", tt.name, e.State, tt.wantState)
@@ -287,7 +290,7 @@ func Test_CaptureEnterOffline(t *testing.T) {
 			if tt.wantIPs != 0 {
 				e := h.table.findByMAC(tt.packet.SenderHardwareAddr)
 				if e == nil || len(e.IPs()) != tt.wantIPs {
-					t.Errorf("Test_Capture:%s table IP len=%+v, wantLen %v", tt.name, len(e.IPs()), tt.wantLen)
+					t.Errorf("Test_Capture:%s table IP len=%+v, wantLen %v", tt.name, len(e.IPs()), tt.wantIPs)
 				}
 				if e.State != tt.wantState {
 					t.Errorf("Test_Capture:%s entry state=%s, wantState %v", tt.name, e.State, tt.wantState)

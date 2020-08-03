@@ -100,10 +100,8 @@ func (c *Handler) FakeIPConflict(clientHwAddr net.HardwareAddr, clientIP net.IP)
 //
 func (c *Handler) IPChanged(clientHwAddr net.HardwareAddr, clientIP net.IP) {
 	// Do nothing if we already have this mac and ip
-	if client := c.table.findByMAC(clientHwAddr); client != nil && client.Online {
-		if ip, _ := client.findIP(clientIP); ip != nil {
-			return
-		}
+	if client := c.table.findByMAC(clientHwAddr); client != nil && client.Online && client.IP().Equal(clientIP) {
+		return
 	}
 
 	if Debug {
@@ -116,13 +114,11 @@ func (c *Handler) IPChanged(clientHwAddr net.HardwareAddr, clientIP net.IP) {
 	go func() {
 		for i := 0; i < 5; i++ {
 			time.Sleep(time.Second * 1)
-			if MACEntry := c.table.findByMAC(clientHwAddr); MACEntry != nil {
-				if ip, _ := MACEntry.findIP(clientIP); ip != nil {
-					if Debug {
-						log.WithFields(log.Fields{"mac": clientHwAddr, "ip": clientIP}).Debug("ARP found mac")
-					}
-					return
+			if MACEntry := c.table.findByMAC(clientHwAddr); MACEntry != nil && MACEntry.findIP(clientIP) != nil {
+				if Debug {
+					log.WithFields(log.Fields{"mac": clientHwAddr, "ip": clientIP}).Debug("ARP found mac")
 				}
+				return
 			}
 
 			// Silent request
@@ -173,19 +169,19 @@ func (c *Handler) spoofLoop(ctx context.Context, client *MACEntry) {
 		virtual.LastUpdated = time.Now()
 		c.Unlock()
 
-		for _, v := range virtual.ipArray {
+		for _, v := range virtual.IPs() {
 
 			// Re-arp target to change router to host so all traffic comes to us
 			// i.e. tell target I am 192.168.0.1
 			//
 			// Use virtual IP as it is guaranteed to not change.
-			c.forceSpoof(mac, v.IP)
+			c.forceSpoof(mac, v)
 
 			// Use VirtualHost to request ownership of the IP; try to force target to acquire another IP
-			c.forceAnnouncement(virtual.MAC, v.IP)
+			c.forceAnnouncement(virtual.MAC, v)
 
 			if nTimes%16 == 0 {
-				log.Infof("ARP claim mac=%s ip=%s repeat=%v duration=%v", mac, v.IP, nTimes, time.Now().Sub(startTime))
+				log.Infof("ARP claim mac=%s ip=%s repeat=%v duration=%v", mac, v, nTimes, time.Now().Sub(startTime))
 			}
 			nTimes++
 		}

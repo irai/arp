@@ -43,13 +43,13 @@ func (e *MACEntry) IPs() []net.IP {
 	return ips
 }
 
-func (e *MACEntry) findIP(ip net.IP) (net.IP, int) {
+func (e *MACEntry) findIP(ip net.IP) net.IP {
 	for i := range e.ipArray {
 		if ip.Equal(e.ipArray[i].IP) {
-			return ip, i
+			return ip
 		}
 	}
-	return nil, 0
+	return nil
 }
 
 type arpTable struct {
@@ -104,7 +104,7 @@ func (t *arpTable) findVirtualIP(ip net.IP) *MACEntry {
 		if v.State != StateVirtualHost {
 			continue
 		}
-		if entry, _ := v.findIP(ip); entry != nil {
+		if v.findIP(ip) != nil {
 			return v
 		}
 	}
@@ -117,7 +117,7 @@ func (t *arpTable) findByIP(ip net.IP) *MACEntry {
 		if v.State == StateVirtualHost {
 			continue
 		}
-		if entry, _ := v.findIP(ip); entry != nil {
+		if v.findIP(ip) != nil {
 			return v
 		}
 	}
@@ -136,28 +136,27 @@ func (t *arpTable) getTable() (table []MACEntry) {
 }
 
 func (e *MACEntry) updateIP(ip net.IP) (entry IPEntry, found bool) {
-	fip, index := e.findIP(ip)
-
-	// If in hunt state, ignore any previous IP
-	if e.State == StateHunt {
-		if fip != nil {
-			return IPEntry{}, true
-		}
-		e.freeIPs() // delete previous IPs
-	}
 
 	now := time.Now()
-	if fip != nil {
-		e.ipArray[index].LastUpdated = now
-		return e.ipArray[index], true
+	// common path - IP is the same
+	if ip.Equal(e.ipArray[0].IP) {
+		e.ipArray[0].LastUpdated = now
+		return e.ipArray[0], true
 	}
 
+	// If in hunt state, ignore any previous IP
+	if e.State == StateHunt && e.findIP(ip) != nil {
+		return IPEntry{}, true
+		// e.freeIPs() // delete previous IPs
+	}
+
+	// push all down by one
 	i := nIPs - 1
 	for i > 0 {
 		e.ipArray[i] = e.ipArray[i-1]
 		i = i - 1
 	}
-	entry = IPEntry{IP: ip, LastUpdated: now}
+	entry = IPEntry{IP: ip.To4(), LastUpdated: now}
 	e.ipArray[0] = entry
 	e.LastUpdated = now
 	return entry, false
