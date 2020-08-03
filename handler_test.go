@@ -342,7 +342,7 @@ func Test_CaptureEnterOffline(t *testing.T) {
 	if e := h.table.findByMAC(mac2); e == nil || e.State != StateNormal || e.Online {
 		t.Fatalf("Test_CaptureEnterOffline is not normal entry=%+v", e)
 	}
-	if e := h.table.findVirtualIP(ip2); e == nil || e.State != StateVirtualHost || e.Online {
+	if e := h.table.findVirtualIP(ip2); e == nil || e.State != StateVirtualHost || !e.Online {
 		t.Fatalf("Test_CaptureEnterOffline wrong virtualip entry=%v", e)
 	}
 	h.Unlock()

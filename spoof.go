@@ -148,13 +148,18 @@ func (c *Handler) spoofLoop(ctx context.Context, client *MACEntry, ip net.IP) {
 	// create a virtual host and move IPs to it
 	// Virtual Host will exist until they get deleted by the purge goroutine
 	c.Lock()
-	if c.table.findVirtualIP(ip) != nil {
+	virtual := c.table.findVirtualIP(ip)
+
+	// Online virtual hosts are still running in a goroutine
+	if virtual != nil && virtual.Online {
 		c.Unlock()
 		return
 	}
 
-	virtual, _ := c.table.upsert(StateVirtualHost, newVirtualHardwareAddr(), ip)
-	virtual.Online = false // always keep virtual hosts as offline
+	if virtual == nil {
+		virtual, _ = c.table.upsert(StateVirtualHost, newVirtualHardwareAddr(), ip)
+	}
+	virtual.Online = true // online indicates goroutine is running
 	mac := client.MAC
 	c.Unlock()
 
@@ -170,6 +175,7 @@ func (c *Handler) spoofLoop(ctx context.Context, client *MACEntry, ip net.IP) {
 		client := c.table.findByMAC(mac)
 		if client == nil || client.State != StateHunt {
 			log.Infof("ARP claim end ip=%s mac=%s client=%s repeat=%v duration=%v", ip, virtual.MAC, mac, nTimes, time.Now().Sub(startTime))
+			virtual.Online = false // goroutine ended
 			c.Unlock()
 			return
 		}
