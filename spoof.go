@@ -100,8 +100,10 @@ func (c *Handler) FakeIPConflict(clientHwAddr net.HardwareAddr, clientIP net.IP)
 //
 func (c *Handler) IPChanged(clientHwAddr net.HardwareAddr, clientIP net.IP) {
 	// Do nothing if we already have this mac and ip
-	if client := c.table.findByMAC(clientHwAddr); client != nil && client.findIP(clientIP) != nil && client.Online {
-		return
+	if client := c.table.findByMAC(clientHwAddr); client != nil && client.Online {
+		if ip, _ := client.findIP(clientIP); ip != nil {
+			return
+		}
 	}
 
 	if Debug {
@@ -114,11 +116,13 @@ func (c *Handler) IPChanged(clientHwAddr net.HardwareAddr, clientIP net.IP) {
 	go func() {
 		for i := 0; i < 5; i++ {
 			time.Sleep(time.Second * 1)
-			if MACEntry := c.table.findByMAC(clientHwAddr); MACEntry != nil && MACEntry.findIP(clientIP) != nil {
-				if Debug {
-					log.WithFields(log.Fields{"mac": clientHwAddr, "ip": clientIP}).Debug("ARP found mac")
+			if MACEntry := c.table.findByMAC(clientHwAddr); MACEntry != nil {
+				if ip, _ := MACEntry.findIP(clientIP); ip != nil {
+					if Debug {
+						log.WithFields(log.Fields{"mac": clientHwAddr, "ip": clientIP}).Debug("ARP found mac")
+					}
+					return
 				}
-				return
 			}
 
 			// Silent request
@@ -145,7 +149,7 @@ func (c *Handler) spoofLoop(ctx context.Context, client *MACEntry) {
 	c.Lock()
 	virtual, _ := c.table.upsert(StateVirtualHost, newVirtualHardwareAddr(), nil)
 	virtual.Online = false // always keep virtual hosts as offline
-	for _, v := range client.IPs {
+	for _, v := range client.ipArray {
 		virtual.updateIP(v.IP)
 	}
 	mac := client.MAC
@@ -169,7 +173,7 @@ func (c *Handler) spoofLoop(ctx context.Context, client *MACEntry) {
 		virtual.LastUpdated = time.Now()
 		c.Unlock()
 
-		for _, v := range virtual.IPs {
+		for _, v := range virtual.ipArray {
 
 			// Re-arp target to change router to host so all traffic comes to us
 			// i.e. tell target I am 192.168.0.1

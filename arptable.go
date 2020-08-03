@@ -15,18 +15,41 @@ type IPEntry struct {
 	LastUpdated time.Time
 }
 
+// How many IPs to keep
+const nIPs = 4
+
 // MACEntry holds a mac to ip MACEntry
 type MACEntry struct {
 	MAC         net.HardwareAddr
-	IPs         map[string]IPEntry
+	ipArray     [nIPs]IPEntry
 	State       arpState
 	LastUpdated time.Time
 	Online      bool
 }
 
-func (e *MACEntry) findIP(ip net.IP) net.IP {
-	entry, _ := e.IPs[string(ip)]
-	return entry.IP
+// IP returns the last IP detected
+func (e *MACEntry) IP() net.IP {
+	return e.ipArray[0].IP
+}
+
+// IPs return list of IPs associated with this entry
+func (e *MACEntry) IPs() []net.IP {
+	ips := make([]net.IP, 0, nIPs)
+	for i := range e.ipArray {
+		if e.ipArray[i].IP != nil {
+			ips = append(ips, e.ipArray[i].IP)
+		}
+	}
+	return ips
+}
+
+func (e *MACEntry) findIP(ip net.IP) (net.IP, int) {
+	for i := range e.ipArray {
+		if ip.Equal(e.ipArray[i].IP) {
+			return ip, i
+		}
+	}
+	return nil, 0
 }
 
 type arpTable struct {
@@ -54,9 +77,9 @@ const (
 
 // String interface
 func (e MACEntry) String() string {
-	ips := make([]string, len(e.IPs))
-	for i := range e.IPs {
-		ips = append(ips, fmt.Sprintf("%s (%v)", e.IPs[i].IP, time.Since(e.IPs[i].LastUpdated)))
+	ips := make([]string, len(e.ipArray))
+	for i := range e.ipArray {
+		ips = append(ips, fmt.Sprintf("%s (%v)", e.ipArray[i].IP, time.Since(e.ipArray[i].LastUpdated)))
 	}
 	return fmt.Sprintf("%5v %6s mac=%17s since=%v ips=%v", e.Online, e.State, e.MAC, time.Since(e.LastUpdated), ips)
 }
@@ -81,7 +104,7 @@ func (t *arpTable) findVirtualIP(ip net.IP) *MACEntry {
 		if v.State != StateVirtualHost {
 			continue
 		}
-		if _, ok := v.IPs[string(ip)]; ok {
+		if entry, _ := v.findIP(ip); entry != nil {
 			return v
 		}
 	}
@@ -94,7 +117,7 @@ func (t *arpTable) findByIP(ip net.IP) *MACEntry {
 		if v.State == StateVirtualHost {
 			continue
 		}
-		if _, ok := v.IPs[string(ip)]; ok {
+		if entry, _ := v.findIP(ip); entry != nil {
 			return v
 		}
 	}
@@ -113,25 +136,37 @@ func (t *arpTable) getTable() (table []MACEntry) {
 }
 
 func (e *MACEntry) updateIP(ip net.IP) (entry IPEntry, found bool) {
-	_, ok := e.IPs[string(ip)]
+	fip, index := e.findIP(ip)
 
 	// If in hunt state, ignore any previous IP
 	if e.State == StateHunt {
-		if ok {
+		if fip != nil {
 			return IPEntry{}, true
 		}
 		e.freeIPs() // delete previous IPs
 	}
 
 	now := time.Now()
+	if fip != nil {
+		e.ipArray[index].LastUpdated = now
+		return e.ipArray[index], true
+	}
+
+	i := nIPs - 1
+	for i > 0 {
+		e.ipArray[i] = e.ipArray[i-1]
+		i = i - 1
+	}
 	entry = IPEntry{IP: ip, LastUpdated: now}
-	e.IPs[string(ip)] = entry
+	e.ipArray[0] = entry
 	e.LastUpdated = now
-	return entry, ok
+	return entry, false
 }
 
 func (e *MACEntry) freeIPs() {
-	e.IPs = make(map[string]IPEntry, 6)
+	for i := range e.ipArray {
+		e.ipArray[i] = IPEntry{}
+	}
 }
 
 func (t *arpTable) upsert(state arpState, mac net.HardwareAddr, ip net.IP) (entry *MACEntry, found bool) {
@@ -139,7 +174,7 @@ func (t *arpTable) upsert(state arpState, mac net.HardwareAddr, ip net.IP) (entr
 	now := time.Now()
 	e, found := t.macTable[string(mac)]
 	if !found {
-		e = &MACEntry{State: state, MAC: mac, IPs: make(map[string]IPEntry, 6), LastUpdated: now, Online: false}
+		e = &MACEntry{State: state, MAC: mac, LastUpdated: now, Online: false}
 		t.macTable[string(mac)] = e
 		if Debug {
 			log.Debugf("ARP new mac=%s ip=%s detected", mac, ip)
@@ -154,10 +189,7 @@ func (t *arpTable) upsert(state arpState, mac net.HardwareAddr, ip net.IP) (entr
 		return e, found
 	}
 
-	// replace IP value
-	ipEntry, ok := e.IPs[string(ip)]
-	ipEntry = IPEntry{IP: ip, LastUpdated: now}
-	e.IPs[string(ip)] = ipEntry
+	_, ok := e.updateIP(ip)
 	if found && ok {
 		return e, true
 	}

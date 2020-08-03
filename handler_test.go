@@ -100,7 +100,7 @@ func Test_ServeRequests(t *testing.T) {
 			}
 			if tt.wantIPs != 0 {
 				e := h.table.findByMAC(tt.packet.SenderHardwareAddr)
-				if e == nil || len(e.IPs) != tt.wantIPs {
+				if e == nil || len(e.IPs()) != tt.wantIPs {
 					t.Errorf("Test_Requests:%s table IP entry=%+v, wantLen %v", tt.name, e, tt.wantLen)
 				}
 			}
@@ -154,7 +154,7 @@ func Test_ServeReplies(t *testing.T) {
 			}
 			if tt.wantIPs != 0 {
 				e := h.table.findByMAC(tt.packet.SenderHardwareAddr)
-				if e == nil || len(e.IPs) != tt.wantIPs {
+				if e == nil || len(e.IPs()) != tt.wantIPs {
 					t.Errorf("Test_Requests:%s table IP entry=%+v, wantLen %v", tt.name, e, tt.wantLen)
 				}
 			}
@@ -207,19 +207,19 @@ func Test_CaptureSameIP(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if err := h.client.WriteTo(tt.packet, nil); err != tt.wantErr {
-				t.Errorf("Test_Capture:%s error = %v, wantErr %v", tt.name, err, tt.wantErr)
+				t.Errorf("Test_catpureSameIP:%s error = %v, wantErr %v", tt.name, err, tt.wantErr)
 			}
 			time.Sleep(time.Millisecond * 10)
 			if len(h.table.macTable) != tt.wantLen {
-				t.Errorf("Test_Capture:%s table len = %v, wantLen %v", tt.name, len(h.table.macTable), tt.wantLen)
+				t.Errorf("Test_catpureSameIP:%s table len = %v, wantLen %v", tt.name, len(h.table.macTable), tt.wantLen)
 			}
 			if tt.wantIPs != 0 {
 				e := h.table.findByMAC(tt.packet.SenderHardwareAddr)
-				if e == nil || len(e.IPs) != tt.wantIPs {
-					t.Errorf("Test_Capture:%s table IP entry=%+v, wantLen %v", tt.name, e, tt.wantLen)
+				if e == nil || len(e.IPs()) != tt.wantIPs {
+					t.Errorf("Test_catpureSameIP:%s table IP entry=%+v, wantLen %v", tt.name, e, tt.wantLen)
 				}
 				if e.State != tt.wantState {
-					t.Errorf("Test_Capture:%s entry state=%s, wantState %v", tt.name, e.State, tt.wantState)
+					t.Errorf("Test_captureSameIP:%s entry state=%s, wantState %v", tt.name, e.State, tt.wantState)
 
 				}
 			}
@@ -286,8 +286,8 @@ func Test_CaptureEnterOffline(t *testing.T) {
 			}
 			if tt.wantIPs != 0 {
 				e := h.table.findByMAC(tt.packet.SenderHardwareAddr)
-				if e == nil || len(e.IPs) != tt.wantIPs {
-					t.Errorf("Test_Capture:%s table IP entry=%+v, wantLen %v", tt.name, e, tt.wantLen)
+				if e == nil || len(e.IPs()) != tt.wantIPs {
+					t.Errorf("Test_Capture:%s table IP len=%+v, wantLen %v", tt.name, len(e.IPs()), tt.wantLen)
 				}
 				if e.State != tt.wantState {
 					t.Errorf("Test_Capture:%s entry state=%s, wantState %v", tt.name, e.State, tt.wantState)

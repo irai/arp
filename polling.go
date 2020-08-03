@@ -51,7 +51,7 @@ func (c *Handler) probeOnlineLoop(ctx context.Context, interval time.Duration) e
 					// if e.IP.IsLinkLocalUnicast() {
 					// continue
 					// }
-					for _, v := range entry.IPs {
+					for _, v := range entry.ipArray {
 						if Debug {
 							log.Debugf("ARP is %s online? mac=%s", v.IP, entry.MAC)
 						}
@@ -99,7 +99,7 @@ func (c *Handler) purgeLoop(ctx context.Context, offline time.Duration, purge ti
 				// Set offline if no updates since the offline deadline
 				// Virtual hosts are always offline so won't be picked up here
 				if e.Online && e.LastUpdated.Before(offlineCutoff) {
-					log.WithFields(log.Fields{"mac": e.MAC, "ips": e.IPs}).Info("ARP device is offline")
+					log.WithFields(log.Fields{"mac": e.MAC, "ips": e.ipArray}).Info("ARP device is offline")
 
 					e.Online = false
 					e.State = StateNormal // Stop hunt if in progress
