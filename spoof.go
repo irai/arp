@@ -145,8 +145,8 @@ func (c *Handler) spoofLoop(ctx context.Context, client *MACEntry) {
 	c.Lock()
 	virtual, _ := c.table.upsert(StateVirtualHost, newVirtualHardwareAddr(), nil)
 	virtual.Online = false // always keep virtual hosts as offline
-	for _, v := range client.ipArray {
-		virtual.updateIP(v.IP)
+	for _, v := range client.IPs() {
+		virtual.updateIP(v)
 	}
 	mac := client.MAC
 	c.Unlock()

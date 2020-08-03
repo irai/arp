@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	log "github.com/sirupsen/logrus"
+
 	marp "github.com/mdlayher/arp"
 )
 
@@ -27,6 +29,36 @@ var packets []marp.Packet = []marp.Packet{
 func newPacket(op marp.Operation, sMAC net.HardwareAddr, sIP net.IP, tMAC net.HardwareAddr, tIP net.IP) *marp.Packet {
 	p, _ := marp.NewPacket(op, sMAC, sIP, tMAC, tIP)
 	return p
+}
+
+type notificationCounter struct {
+	onlineCounter  int
+	offlineCounter int
+}
+
+func addNotification(ctx context.Context, h *Handler) *notificationCounter {
+	channel := make(chan MACEntry, 10)
+	n := &notificationCounter{}
+	h.AddNotificationChannel(channel)
+
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case entry := <-channel:
+				if entry.Online {
+					n.onlineCounter++
+					log.Print("online", entry.String(), n.onlineCounter)
+				} else {
+					n.offlineCounter++
+					log.Print("offline", entry.String(), n.offlineCounter)
+				}
+			}
+		}
+	}()
+
+	return n
 }
 
 func testHandler(t *testing.T) *Handler {
@@ -233,12 +265,14 @@ func Test_CaptureSameIP(t *testing.T) {
 }
 
 func Test_CaptureEnterOffline(t *testing.T) {
-	// Debug = true
-	// log.SetLevel(log.DebugLevel)
+	Debug = true
+	log.SetLevel(log.DebugLevel)
 	h := testHandler(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	notification := addNotification(ctx, h)
 
 	var wg sync.WaitGroup
 	go func() {
@@ -277,6 +311,7 @@ func Test_CaptureEnterOffline(t *testing.T) {
 	}{
 		{"reply3-1", newPacket(marp.OperationReply, mac3, ip3, zeroMAC, hostIP), nil, 4, 1, StateNormal},
 		{"reply4-1", newPacket(marp.OperationReply, mac4, ip4, zeroMAC, hostIP), nil, 4, 1, StateNormal},
+		{"reply5-1", newPacket(marp.OperationReply, mac5, ip5, zeroMAC, hostIP), nil, 5, 1, StateNormal},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -326,4 +361,6 @@ func Test_CaptureEnterOffline(t *testing.T) {
 
 	cancel()
 	wg.Wait()
+
+	log.Printf("notification %+v", notification)
 }

@@ -127,6 +127,7 @@ func Test_DuplicateIP(t *testing.T) {
 }
 func Test_HuntIP(t *testing.T) {
 	h := testHandler(t)
+
 	e, _ := h.table.upsert(StateNormal, mac1, ip2)
 	e.updateIP(ip3)
 	e.Online = true
@@ -160,4 +161,5 @@ func Test_HuntIP(t *testing.T) {
 	if !e.ipArray[0].IP.Equal(ip5) || !e.ipArray[1].IP.Equal(ip4) || !e.ipArray[2].IP.Equal(ip3) || !e.ipArray[3].IP.Equal(ip2) {
 		t.Fatal("invalid IPs", e.IPs())
 	}
+
 }
