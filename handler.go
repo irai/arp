@@ -225,11 +225,10 @@ func (c *Handler) ListenAndServe(ctx context.Context) error {
 			return nil
 		}
 		if err != nil {
+			// "interrupted system call" occurs frequently after go 1.14
+			// simply retry - don't wait
 			if err1, ok := err.(net.Error); ok && err1.Temporary() {
-				if Debug {
-					log.Print("ARP read error is temporary - retry", err1)
-				}
-				time.Sleep(time.Millisecond * 30) // Wait a few seconds before retrying
+				// log.Print("ARP read error is temporary - retry ", err1)
 				continue
 			}
 			if Debug {
