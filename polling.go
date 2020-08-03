@@ -53,7 +53,7 @@ func (c *Handler) probeOnlineLoop(ctx context.Context, interval time.Duration) e
 					// }
 					for _, v := range entry.IPs() {
 						if Debug {
-							log.Printf("ARP is %s online? mac=%s", v, entry.MAC)
+							log.Printf("ARP ip=%s online? mac=%s", v, entry.MAC)
 						}
 						if err := c.request(c.config.HostMAC, c.config.HostIP, entry.MAC, v); err != nil {
 							log.Printf("Error ARP request mac=%s ip=%s: %s ", entry.MAC, v, err)

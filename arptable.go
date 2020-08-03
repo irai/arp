@@ -88,7 +88,7 @@ func (t *arpTable) printTable() {
 	// Don't lock; it is called from multiple locked locations
 	table := t.macTable
 	for _, v := range table {
-		log.Printf("ARP table %s", v)
+		log.Printf("ARP entry %s", v)
 	}
 }
 
