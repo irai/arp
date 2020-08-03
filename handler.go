@@ -379,9 +379,9 @@ func (c *Handler) ListenAndServe(ctx context.Context) error {
 		if notify > 0 {
 			if sender.Online == false {
 				sender.Online = true
-				log.Printf("ARP mac=%s is online ip=%s state=%s", sender.MAC, packet.SenderIP, sender.State)
+				log.Printf("ARP ip=%s is online mac=%s state=%s", packet.SenderIP, sender.MAC, sender.State)
 			} else {
-				log.Printf("ARP mac=%s changed IP ip=%s state=%s", sender.MAC, packet.SenderIP, sender.State)
+				log.Printf("ARP ip=%s new IP for mac=%s state=%s", packet.SenderIP, sender.MAC, sender.State)
 			}
 
 			if c.notification != nil {
