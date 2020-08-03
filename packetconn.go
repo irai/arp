@@ -17,19 +17,20 @@ type bufferedPacketConn struct {
 }
 
 // NewTestHandler allow you to pass a PacketConn. Useful for testing
-func NewTestHandler(config Config, p net.PacketConn) (c *Handler, err error) {
+// if p is nil, auto create a bufferedPacketConn
+func NewTestHandler(config Config, p net.PacketConn) (c *Handler, conn *marp.Client, err error) {
 	c = newHandler(config)
 	ifi, err := net.InterfaceByName(config.NIC)
 	if err != nil {
-		return nil, fmt.Errorf("InterfaceByName error: %w", err)
+		return nil, nil, fmt.Errorf("InterfaceByName error: %w", err)
 	}
 	if p == nil {
 		p = &bufferedPacketConn{channel: make(chan []byte, 32)}
 	}
 	if c.client, err = marp.New(ifi, p); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return c, nil
+	return c, c.client, nil
 }
 
 var channelMutex sync.Mutex // avoid race in Close()

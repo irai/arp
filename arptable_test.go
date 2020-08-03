@@ -27,7 +27,7 @@ var (
 
 func Test_AddSimple(t *testing.T) {
 
-	h := testHandler(t)
+	h, _ := testHandler(t)
 	MACEntry, _ := h.table.upsert(StateNormal, mac1, ip4)
 
 	if MACEntry != h.table.findByMAC(mac1) || MACEntry != h.table.findByIP(ip4) {
@@ -37,7 +37,7 @@ func Test_AddSimple(t *testing.T) {
 
 func Test_AddMany(t *testing.T) {
 
-	h := testHandler(t)
+	h, _ := testHandler(t)
 
 	MACEntry, _ := h.table.upsert(StateNormal, mac1, ip4)
 	MACEntry2, _ := h.table.upsert(StateNormal, mac2, ip2)
@@ -74,7 +74,7 @@ func Test_AddMany(t *testing.T) {
 }
 func Test_Delete(t *testing.T) {
 
-	h := testHandler(t)
+	h, _ := testHandler(t)
 	h.table.upsert(StateNormal, mac1, ip4)
 	MACEntry2, _ := h.table.upsert(StateVirtualHost, mac2, nil)
 	MACEntry2.updateIP(ip2)
@@ -97,7 +97,7 @@ func Test_Delete(t *testing.T) {
 }
 
 func Test_DuplicateIP(t *testing.T) {
-	h := testHandler(t)
+	h, _ := testHandler(t)
 	e, _ := h.table.upsert(StateNormal, mac1, ip2)
 	e.Online = true
 	e.updateIP(ip3)
@@ -126,7 +126,7 @@ func Test_DuplicateIP(t *testing.T) {
 	}
 }
 func Test_HuntIP(t *testing.T) {
-	h := testHandler(t)
+	h, _ := testHandler(t)
 
 	e, _ := h.table.upsert(StateNormal, mac1, ip2)
 	e.updateIP(ip3)

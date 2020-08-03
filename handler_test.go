@@ -61,7 +61,7 @@ func addNotification(ctx context.Context, h *Handler) *notificationCounter {
 	return n
 }
 
-func testHandler(t *testing.T) *Handler {
+func testHandler(t *testing.T) (*Handler, *marp.Client) {
 
 	all, _ := net.Interfaces()
 
@@ -76,15 +76,15 @@ func testHandler(t *testing.T) *Handler {
 		PurgeDeadline:           time.Second * 4,
 	}
 
-	h, _ := NewTestHandler(config, nil)
+	h, conn, _ := NewTestHandler(config, nil)
 
-	return h
+	return h, conn
 }
 
 func Test_ServeRequests(t *testing.T) {
 	//Debug = true
 	// log.SetLevel(log.DebugLevel)
-	h := testHandler(t)
+	h, conn := testHandler(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -123,7 +123,7 @@ func Test_ServeRequests(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := h.client.WriteTo(tt.packet, nil); err != tt.wantErr {
+			if err := conn.WriteTo(tt.packet, nil); err != tt.wantErr {
 				t.Errorf("Test_Requests:%s error = %v, wantErr %v", tt.name, err, tt.wantErr)
 			}
 			time.Sleep(time.Millisecond * 10)
@@ -145,7 +145,7 @@ func Test_ServeRequests(t *testing.T) {
 func Test_ServeReplies(t *testing.T) {
 	// Debug = true
 	// log.SetLevel(log.DebugLevel)
-	h := testHandler(t)
+	h, conn := testHandler(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -177,7 +177,7 @@ func Test_ServeReplies(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := h.client.WriteTo(tt.packet, nil); err != tt.wantErr {
+			if err := conn.WriteTo(tt.packet, nil); err != tt.wantErr {
 				t.Errorf("Test_Requests:%s error = %v, wantErr %v", tt.name, err, tt.wantErr)
 			}
 			time.Sleep(time.Millisecond * 10)
@@ -198,7 +198,7 @@ func Test_ServeReplies(t *testing.T) {
 func Test_CaptureSameIP(t *testing.T) {
 	// Debug = true
 	// log.SetLevel(log.DebugLevel)
-	h := testHandler(t)
+	h, conn := testHandler(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -240,7 +240,7 @@ func Test_CaptureSameIP(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := h.client.WriteTo(tt.packet, nil); err != tt.wantErr {
+			if err := conn.WriteTo(tt.packet, nil); err != tt.wantErr {
 				t.Errorf("Test_catpureSameIP:%s error = %v, wantErr %v", tt.name, err, tt.wantErr)
 			}
 			time.Sleep(time.Millisecond * 10)
@@ -265,9 +265,9 @@ func Test_CaptureSameIP(t *testing.T) {
 }
 
 func Test_CaptureEnterOffline(t *testing.T) {
-	Debug = true
-	log.SetLevel(log.DebugLevel)
-	h := testHandler(t)
+	// Debug = true
+	// log.SetLevel(log.DebugLevel)
+	h, conn := testHandler(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -315,7 +315,7 @@ func Test_CaptureEnterOffline(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := h.client.WriteTo(tt.packet, nil); err != tt.wantErr {
+			if err := conn.WriteTo(tt.packet, nil); err != tt.wantErr {
 				t.Errorf("Test_Capture:%s error = %v, wantErr %v", tt.name, err, tt.wantErr)
 			}
 			time.Sleep(time.Millisecond * 10)

@@ -12,7 +12,7 @@ import (
 func TestHandler_ForceIPChange(t *testing.T) {
 	//Debug = true
 	// log.SetLevel(log.DebugLevel)
-	h := testHandler(t)
+	h, conn := testHandler(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -48,7 +48,7 @@ func TestHandler_ForceIPChange(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := h.client.WriteTo(tt.packet, nil); err != tt.wantErr {
+			if err := conn.WriteTo(tt.packet, nil); err != tt.wantErr {
 				t.Errorf("TestHandler_ForceIPChange:%s error = %v, wantErr %v", tt.name, err, tt.wantErr)
 			}
 			time.Sleep(time.Millisecond * 10)
