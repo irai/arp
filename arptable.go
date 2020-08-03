@@ -140,6 +140,7 @@ func (e *MACEntry) updateIP(ip net.IP) (entry IPEntry, found bool) {
 	// common path - IP is the same
 	if ip.Equal(e.ipArray[0].IP) {
 		e.ipArray[0].LastUpdated = now
+		e.LastUpdated = now
 		return e.ipArray[0], true
 	}
 
