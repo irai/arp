@@ -144,9 +144,8 @@ func (c *Handler) ScanNetwork(ctx context.Context, lan net.IPNet) error {
 		if err != nil {
 			if err1, ok := err.(net.Error); ok && err1.Temporary() {
 				if Debug {
-					log.Print("ARP error in read socket is temporary - retry", err1)
+					log.Print("ARP error in write socket is temporary - retry ", err1)
 				}
-				time.Sleep(time.Millisecond * 100) // Wait before retrying
 				continue
 			}
 
