@@ -9,7 +9,7 @@ import (
 )
 
 func Test_bufferedPacketConn_ReadFrom(t *testing.T) {
-	c := newBufferedPacketConn()
+	c := &bufferedPacketConn{channel: make(chan []byte, 32)}
 
 	sent := []byte("test")
 	sent2 := []byte("test2")

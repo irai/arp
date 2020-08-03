@@ -20,8 +20,9 @@ type Config struct {
 	RouterIP                net.IP           `yaml:"-"`
 	HomeLAN                 net.IPNet        `yaml:"-"`
 	FullNetworkScanInterval time.Duration    `yaml:"-"`
-	OnlineProbeInterval     time.Duration    `yaml:"-"`
-	PurgeInterval           time.Duration    `yaml:"-"`
+	ProbeInterval           time.Duration    `yaml:"-"` // how often to probe if IP is online
+	OfflineDeadline         time.Duration    `yaml:"-"` // mark offline if more than OfflineInte
+	PurgeDeadline           time.Duration    `yaml:"-"`
 }
 
 // Handler stores instance variables
@@ -66,17 +67,21 @@ func newHandler(config Config) (c *Handler) {
 	c.config.RouterIP = config.RouterIP.To4()
 	c.config.HomeLAN = config.HomeLAN
 	c.config.FullNetworkScanInterval = config.FullNetworkScanInterval
-	c.config.OnlineProbeInterval = config.OnlineProbeInterval
-	c.config.PurgeInterval = config.PurgeInterval
+	c.config.ProbeInterval = config.ProbeInterval
+	c.config.OfflineDeadline = config.OfflineDeadline
+	c.config.PurgeDeadline = config.PurgeDeadline
 
 	if c.config.FullNetworkScanInterval <= 0 || c.config.FullNetworkScanInterval > time.Hour*12 {
 		c.config.FullNetworkScanInterval = time.Minute * 60
 	}
-	if c.config.OnlineProbeInterval <= 0 || c.config.OnlineProbeInterval > time.Minute*5 {
-		c.config.OnlineProbeInterval = time.Minute * 2
+	if c.config.ProbeInterval <= 0 || c.config.ProbeInterval > time.Minute*10 {
+		c.config.ProbeInterval = time.Minute * 2
 	}
-	if c.config.PurgeInterval <= c.config.OnlineProbeInterval || c.config.PurgeInterval > time.Hour*3 {
-		c.config.OnlineProbeInterval = time.Minute * 2
+	if c.config.OfflineDeadline <= c.config.ProbeInterval {
+		c.config.OfflineDeadline = c.config.ProbeInterval * 2
+	}
+	if c.config.PurgeDeadline <= c.config.OfflineDeadline {
+		c.config.PurgeDeadline = time.Minute * 61
 	}
 
 	if Debug {
@@ -85,19 +90,6 @@ func newHandler(config Config) (c *Handler) {
 	}
 
 	return c
-}
-
-// NewTestHandler allow you to pass a PacketConn. Useful for testing
-func NewTestHandler(config Config, p net.PacketConn) (c *Handler, err error) {
-	c = newHandler(config)
-	ifi, err := net.InterfaceByName(config.NIC)
-	if err != nil {
-		return nil, fmt.Errorf("InterfaceByName error: %w", err)
-	}
-	if c.client, err = marp.New(ifi, p); err != nil {
-		return nil, err
-	}
-	return c, nil
 }
 
 // AddNotificationChannel set the notification channel for when the MACEntry
@@ -176,27 +168,39 @@ func (c *Handler) ListenAndServe(ctx context.Context) error {
 	go func() {
 		wg.Add(1)
 		if err := c.scanLoop(c.ctx, c.config.FullNetworkScanInterval); err != nil {
-			log.Error("ARP ListenAndServer scanLoop terminated unexpectedly", err)
+			log.Error("ARP goroutine scanLoop terminated unexpectedly", err)
 		}
 		wg.Done()
+		c.Close()
+		if Debug {
+			log.Debug("ARP goroutine scanLoop ended")
+		}
 	}()
 
 	// continously probe for online reply
 	go func() {
 		wg.Add(1)
-		if err := c.probeOnlineLoop(c.ctx, c.config.OnlineProbeInterval); err != nil {
-			log.Error("ARP ListenAndServer probeOnlineLoop terminated unexpectedly", err)
+		if err := c.probeOnlineLoop(c.ctx, c.config.ProbeInterval); err != nil {
+			log.Error("ARP goroutine probeOnlineLoop terminated unexpectedly", err)
 		}
 		wg.Done()
+		c.Close()
+		if Debug {
+			log.Debug("ARP goroutine probeOnlineLoop ended")
+		}
 	}()
 
 	// continously check for online-offline transition
 	go func() {
 		wg.Add(1)
-		if err := c.purgeLoop(c.ctx, c.config.OnlineProbeInterval*2, c.config.PurgeInterval); err != nil {
+		if err := c.purgeLoop(c.ctx, c.config.OfflineDeadline, c.config.PurgeDeadline); err != nil {
 			log.Error("ARP ListenAndServer purgeLoop terminated unexpectedly", err)
 		}
 		wg.Done()
+		c.Close()
+		if Debug {
+			log.Debug("ARP goroutine purgeLoop ended")
+		}
 	}()
 
 	go func() {
@@ -210,6 +214,9 @@ func (c *Handler) ListenAndServe(ctx context.Context) error {
 		if ctx.Err() != nil {
 			cancel()
 			wg.Wait()
+			if Debug {
+				log.Debug("ARP goroutine purgeLoop ended")
+			}
 			return nil
 		}
 		if err != nil {

@@ -29,6 +29,26 @@ func newPacket(op marp.Operation, sMAC net.HardwareAddr, sIP net.IP, tMAC net.Ha
 	return p
 }
 
+func testHandler(t *testing.T) *Handler {
+
+	all, _ := net.Interfaces()
+
+	config := Config{
+		NIC:      all[0].Name,
+		HostMAC:  hostMAC,
+		HostIP:   hostIP,
+		RouterIP: routerIP, HomeLAN: homeLAN,
+		FullNetworkScanInterval: time.Second * 60,
+		ProbeInterval:           time.Second * 1,
+		OfflineDeadline:         time.Second * 2,
+		PurgeDeadline:           time.Second * 4,
+	}
+
+	h, _ := NewTestHandler(config, nil)
+
+	return h
+}
+
 func Test_ServeRequests(t *testing.T) {
 	//Debug = true
 	// log.SetLevel(log.DebugLevel)
@@ -205,6 +225,102 @@ func Test_CaptureSameIP(t *testing.T) {
 			}
 		})
 	}
+	cancel()
+	wg.Wait()
+}
+
+func Test_CaptureEnterOffline(t *testing.T) {
+	// Debug = true
+	// log.SetLevel(log.DebugLevel)
+	h := testHandler(t)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var wg sync.WaitGroup
+	go func() {
+		wg.Add(1)
+		h.ListenAndServe(ctx)
+		wg.Done()
+	}()
+
+	e2, _ := h.table.upsert(StateNormal, mac2, ip2)
+	e2.Online = true
+	e3, _ := h.table.upsert(StateNormal, mac3, ip3)
+	e3.Online = true
+	e4, _ := h.table.upsert(StateNormal, mac4, ip4)
+	e4.Online = true
+	time.Sleep(time.Millisecond * 20) // time for ListenAndServe to start
+	h.ForceIPChange(mac2)
+	if e := h.table.findByMAC(mac2); e == nil || e.State != StateHunt || !e.Online {
+		t.Fatalf("Test_CaptureEnterOffline entry2 state=%s, online=%v", e.State, e.Online)
+	}
+	if e := h.table.findByMAC(mac3); e == nil || e.State != StateNormal || !e.Online {
+		t.Fatalf("Test_CaptureEnterOffline entry3 state=%s, online=%v", e.State, e.Online)
+	}
+	if e := h.table.findByMAC(mac4); e == nil || e.State != StateNormal || !e.Online {
+		t.Fatalf("Test_CaptureEnterOffline entry4 state=%s, online=%v", e.State, e.Online)
+	}
+
+	time.Sleep(h.config.ProbeInterval / 2)
+
+	tests := []struct {
+		name      string
+		packet    *marp.Packet
+		wantErr   error
+		wantLen   int
+		wantIPs   int
+		wantState arpState
+	}{
+		{"reply3-1", newPacket(marp.OperationReply, mac3, ip3, zeroMAC, hostIP), nil, 4, 1, StateNormal},
+		{"reply4-1", newPacket(marp.OperationReply, mac4, ip4, zeroMAC, hostIP), nil, 4, 1, StateNormal},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := h.client.WriteTo(tt.packet, nil); err != tt.wantErr {
+				t.Errorf("Test_Capture:%s error = %v, wantErr %v", tt.name, err, tt.wantErr)
+			}
+			time.Sleep(time.Millisecond * 10)
+			if len(h.table.macTable) != tt.wantLen {
+				t.Errorf("Test_Capture:%s table len = %v, wantLen %v", tt.name, len(h.table.macTable), tt.wantLen)
+			}
+			if tt.wantIPs != 0 {
+				e := h.table.findByMAC(tt.packet.SenderHardwareAddr)
+				if e == nil || len(e.IPs) != tt.wantIPs {
+					t.Errorf("Test_Capture:%s table IP entry=%+v, wantLen %v", tt.name, e, tt.wantLen)
+				}
+				if e.State != tt.wantState {
+					t.Errorf("Test_Capture:%s entry state=%s, wantState %v", tt.name, e.State, tt.wantState)
+
+				}
+			}
+		})
+	}
+
+	// wait until offline
+	time.Sleep(h.config.OfflineDeadline)
+
+	h.Lock()
+	if e := h.table.findByMAC(mac2); e == nil || e.State != StateNormal || e.Online {
+		t.Fatalf("Test_CaptureEnterOffline is not normal entry=%+v", e)
+	}
+	if e := h.table.findVirtualIP(ip2); e == nil || e.State != StateVirtualHost || e.Online {
+		t.Fatalf("Test_CaptureEnterOffline wrong virtualip entry=%v", e)
+	}
+	h.Unlock()
+
+	// wait until purge
+	time.Sleep(h.config.PurgeDeadline - h.config.OfflineDeadline)
+
+	h.Lock()
+	if e := h.table.findByMAC(mac2); e != nil {
+		t.Fatalf("Test_CaptureEnterOffline is not offline entry=%+v", e)
+	}
+	if e := h.table.findVirtualIP(ip2); e == nil || e.State != StateVirtualHost || e.Online {
+		t.Fatalf("Test_CaptureEnterOffline wrong virtualip entry=%v", e)
+	}
+	h.Unlock()
+
 	cancel()
 	wg.Wait()
 }

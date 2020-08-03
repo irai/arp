@@ -3,7 +3,6 @@ package arp
 import (
 	"net"
 	"testing"
-	"time"
 )
 
 var (
@@ -25,25 +24,6 @@ var (
 	mac5      = net.HardwareAddr{0x01, 0x02, 0x03, 0x04, 0x05, 0x05}
 	localIP   = net.IPv4(169, 254, 0, 10)
 )
-
-func testHandler(t *testing.T) *Handler {
-
-	all, _ := net.Interfaces()
-
-	config := Config{
-		NIC:      all[0].Name,
-		HostMAC:  hostMAC,
-		HostIP:   hostIP,
-		RouterIP: routerIP, HomeLAN: homeLAN,
-		OnlineProbeInterval:     time.Minute * 1,
-		FullNetworkScanInterval: time.Minute * 20,
-		PurgeInterval:           time.Minute * 10,
-	}
-
-	h, _ := NewTestHandler(config, newBufferedPacketConn())
-
-	return h
-}
 
 func Test_AddSimple(t *testing.T) {
 

@@ -29,7 +29,11 @@ func (c *Handler) scanLoop(ctx context.Context, interval time.Duration) error {
 
 // Probe known macs more often in case they left the network.
 func (c *Handler) probeOnlineLoop(ctx context.Context, interval time.Duration) error {
-	ticker := time.NewTicker(time.Second * 30).C
+	dur := time.Second * 30
+	if interval <= dur {
+		dur = interval / 2
+	}
+	ticker := time.NewTicker(dur).C
 	for {
 		select {
 		case <-ctx.Done():
@@ -65,7 +69,11 @@ func (c *Handler) probeOnlineLoop(ctx context.Context, interval time.Duration) e
 
 func (c *Handler) purgeLoop(ctx context.Context, offline time.Duration, purge time.Duration) error {
 
-	ticker := time.NewTicker(time.Minute * 1).C
+	dur := time.Minute * 1
+	if offline <= dur {
+		dur = offline / 2
+	}
+	ticker := time.NewTicker(dur).C
 	for {
 		select {
 		case <-ctx.Done():
