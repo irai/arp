@@ -3,6 +3,7 @@ package arp
 import (
 	"fmt"
 	"net"
+	"sync"
 	"time"
 
 	marp "github.com/mdlayher/arp"
@@ -31,7 +32,12 @@ func NewTestHandler(config Config, p net.PacketConn) (c *Handler, err error) {
 	return c, nil
 }
 
+var channelMutex sync.Mutex // avoid race in Close()
+
 func (p *bufferedPacketConn) Close() error {
+	channelMutex.Lock()
+	defer channelMutex.Unlock()
+
 	if !p.closed {
 		close(p.channel)
 		p.closed = true
