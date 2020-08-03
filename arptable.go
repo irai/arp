@@ -77,11 +77,11 @@ const (
 
 // String interface
 func (e MACEntry) String() string {
-	ips := make([]string, len(e.ipArray))
-	for i := range e.ipArray {
-		ips = append(ips, fmt.Sprintf("%s (%v)", e.ipArray[i].IP, time.Since(e.ipArray[i].LastUpdated)))
-	}
-	return fmt.Sprintf("%5v %6s mac=%17s since=%v ips=%v", e.Online, e.State, e.MAC, time.Since(e.LastUpdated), ips)
+	// ips := make([]string, len(e.ipArray))
+	// for i := range e.ipArray {
+	// ips = append(ips, fmt.Sprintf("%s (%v)", e.ipArray[i].IP, time.Since(e.ipArray[i].LastUpdated)))
+	// }
+	return fmt.Sprintf("%5v %6s mac=%17s since=%v ips=%v", e.Online, e.State, e.MAC, time.Since(e.LastUpdated), e.IPs())
 }
 
 func (t *arpTable) printTable() {
