@@ -389,8 +389,6 @@ func (c *Handler) ListenAndServe(ctx context.Context) error {
 			}
 		}
 
-		c.Unlock()
-
 		if notify > 0 {
 			if sender.Online == false {
 				sender.Online = true
@@ -403,5 +401,7 @@ func (c *Handler) ListenAndServe(ctx context.Context) error {
 				c.notification <- *sender
 			}
 		}
+
+		c.Unlock()
 	}
 }
