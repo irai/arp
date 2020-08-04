@@ -33,9 +33,10 @@ func (c Config) String() string {
 
 // Handler stores instance variables
 type Handler struct {
-	client *marp.Client
-	table  *arpTable
-	config Config
+	client      *marp.Client
+	table       *arpTable
+	config      Config
+	routerEntry MACEntry // store the router mac address
 	sync.RWMutex
 	notification chan<- MACEntry // notification channel for state change
 	ctx          context.Context // context to cancel internal goroutines
@@ -278,8 +279,17 @@ func (c *Handler) ListenAndServe(ctx context.Context) error {
 			}
 		}
 
-		// Ignore router and host packets
-		if bytes.Equal(packet.SenderIP, c.config.RouterIP) || bytes.Equal(packet.SenderHardwareAddr, c.config.HostMAC) {
+		// Ignore router packets
+		if bytes.Equal(packet.SenderIP, c.config.RouterIP) {
+			if c.routerEntry.MAC == nil { // hack to keep router mac
+				c.routerEntry.MAC = dupMAC(packet.SenderHardwareAddr)
+				c.routerEntry.ipArray[0] = IPEntry{IP: c.config.RouterIP}
+			}
+			continue
+		}
+
+		// Ignore host packets
+		if bytes.Equal(packet.SenderHardwareAddr, c.config.HostMAC) {
 			continue
 		}
 

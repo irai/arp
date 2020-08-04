@@ -146,5 +146,11 @@ func (c *Handler) WhoIs(ip net.IP) (MACEntry *MACEntry, err error) {
 			return MACEntry, nil
 		}
 	}
+
+	// hack to return routerMAC
+	// need a better way to do this without including it in the table!!!
+	if ip.Equal(c.config.RouterIP) && c.routerEntry.MAC != nil {
+		return &c.routerEntry, nil
+	}
 	return nil, nil
 }
