@@ -99,7 +99,8 @@ func (c *Handler) purgeLoop(ctx context.Context, offline time.Duration, purge ti
 				// Set offline if no updates since the offline deadline
 				// Ignore virtual hosts; offline controlled by spoofing goroutine
 				if e.State != StateVirtualHost && e.Online && e.LastUpdated.Before(offlineCutoff) {
-					log.Printf("ARP mac=%s is offline ips=%s", e.MAC, e.IPs())
+					log.Printf("ARP ip=%s is offline mac=%s ips=%s", e.IP(), e.MAC, e.IPs())
+					c.table.printTable()
 
 					e.Online = false
 					e.State = StateNormal // Stop hunt if in progress
