@@ -84,9 +84,12 @@ func (c *Handler) StopIPChange(mac net.HardwareAddr) error {
 //
 func (c *Handler) IPChanged(mac net.HardwareAddr, clientIP net.IP) {
 	// Do nothing if we already have this mac and ip
+	c.RLock()
 	if client := c.table.findByMAC(mac); client != nil && client.Online && client.IP().Equal(clientIP) {
+		c.RUnlock()
 		return
 	}
+	c.RUnlock()
 
 	if Debug {
 		log.Printf("ARP new mac=%s - validating", mac)
@@ -98,12 +101,15 @@ func (c *Handler) IPChanged(mac net.HardwareAddr, clientIP net.IP) {
 	go func() {
 		for i := 0; i < 5; i++ {
 			time.Sleep(time.Second * 1)
+			c.RLock()
 			if entry := c.table.findByMAC(mac); entry != nil && entry.findIP(clientIP) != nil {
+				c.RUnlock()
 				if Debug {
 					log.Printf("ARP found mac=%s ips=%s", entry.MAC, entry.IPs())
 				}
 				return
 			}
+			c.RUnlock()
 
 			// Silent request
 			if err := c.request(c.config.HostMAC, c.config.HostIP, EthernetBroadcast, clientIP); err != nil {
@@ -111,7 +117,10 @@ func (c *Handler) IPChanged(mac net.HardwareAddr, clientIP net.IP) {
 			}
 		}
 		log.Printf("ARP could not detect ip=%s mac=%s", clientIP, mac)
+
+		c.RLock()
 		c.table.printTable()
+		c.RUnlock()
 	}()
 }
 
