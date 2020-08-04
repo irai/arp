@@ -78,9 +78,9 @@ const (
 // String interface
 func (e MACEntry) String() string {
 	if e.Online {
-		return fmt.Sprintf("online  %6s mac=%17s since=%v ips=%v", e.State, e.MAC, time.Since(e.LastUpdated), e.IPs())
+		return fmt.Sprintf("online  %7s mac=%17s since=%v ips=%v", e.State, e.MAC, time.Since(e.LastUpdated), e.IPs())
 	}
-	return fmt.Sprintf("offline %6s mac=%17s since=%v ips=%v", e.State, e.MAC, time.Since(e.LastUpdated), e.IPs())
+	return fmt.Sprintf("offline %7s mac=%17s since=%v ips=%v", e.State, e.MAC, time.Since(e.LastUpdated), e.IPs())
 }
 
 func (t *arpTable) printTable() {
