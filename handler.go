@@ -133,6 +133,11 @@ func (c *Handler) PrintTable() {
 	c.table.printTable()
 }
 
+// GetTable return the mac table as a shallow array of MACEntry
+func (c *Handler) GetTable() []MACEntry {
+	return c.table.getTable()
+}
+
 // Close will terminate the ListenAndServer goroutine as well as all other pending goroutines.
 func (c *Handler) Close() {
 	// Close the arp socket
