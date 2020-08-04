@@ -1,6 +1,7 @@
 package arp
 
 import (
+	"fmt"
 	"net"
 	"time"
 
@@ -129,28 +130,40 @@ func (c *Handler) announceUnicast(mac net.HardwareAddr, ip net.IP, targetMac net
 
 // WhoIs will send a request packet to get the MAC address for the IP. Retry 3 times.
 //
-func (c *Handler) WhoIs(ip net.IP) (MACEntry *MACEntry, err error) {
-	c.RLock()
+func (c *Handler) WhoIs(ip net.IP) (MACEntry, error) {
 
 	// test first before sending request; useful for testing
-	if MACEntry = c.table.findByIP(ip); MACEntry != nil {
+	c.RLock()
+	if e := c.table.findByIP(ip); e != nil {
+		entry := *e
 		c.RUnlock()
-		return MACEntry, nil
+		return entry, nil
 	}
 	c.RUnlock()
 
 	for i := 0; i < 3; i++ {
 		c.Request(c.config.HostMAC, c.config.HostIP, EthernetBroadcast, ip)
 		time.Sleep(time.Millisecond * 50)
-		if MACEntry = c.table.findByIP(ip); MACEntry != nil {
-			return MACEntry, nil
+
+		c.RLock()
+		if e := c.table.findByIP(ip); e != nil {
+			c.RUnlock()
+			return *e, nil
 		}
+		c.RUnlock()
 	}
 
 	// hack to return routerMAC
 	// need a better way to do this without including it in the table!!!
 	if ip.Equal(c.config.RouterIP) && c.routerEntry.MAC != nil {
-		return &c.routerEntry, nil
+		return c.routerEntry, nil
 	}
-	return nil, nil
+
+	if Debug {
+		log.Printf("ARP ip=%s whois not found", ip)
+		c.RLock()
+		c.table.printTable()
+		c.RUnlock()
+	}
+	return MACEntry{}, fmt.Errorf("not found")
 }
