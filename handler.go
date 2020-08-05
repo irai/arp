@@ -284,6 +284,9 @@ func (c *Handler) ListenAndServe(ctx context.Context) error {
 				default:
 					log.Printf("ARP ip=%s request received smac=%v tmac=%v tip=%v", packet.SenderIP, packet.SenderHardwareAddr, packet.TargetHardwareAddr, packet.TargetIP)
 				}
+			default:
+				log.Printf("ARP invalid operation=%v packet=%+v", packet.Operation, packet)
+				continue
 			}
 		}
 
@@ -364,9 +367,6 @@ func (c *Handler) ListenAndServe(ctx context.Context) error {
 			// Android does not send collision detection request,
 			// we will see a reply instead. Check if the address has changed.
 			if _, found := sender.updateIP(dupIP(packet.SenderIP)); !found {
-				if Debug {
-					log.Printf("ARP client state=%v mac=%v updated reply IP to %s", sender.State, sender.MAC, packet.SenderIP)
-				}
 				sender.State = StateNormal // will end hunt goroutine
 				notify++
 			}
@@ -377,7 +377,7 @@ func (c *Handler) ListenAndServe(ctx context.Context) error {
 				sender.Online = true
 				log.Printf("ARP ip=%s is online mac=%s state=%s ips=%s", packet.SenderIP, sender.MAC, sender.State, sender.IPs())
 			} else {
-				log.Printf("ARP ip=%s new IP for mac=%s state=%s ips=%s", packet.SenderIP, sender.MAC, sender.State, sender.IPs())
+				log.Printf("ARP ip=%s is online - updated ip for mac=%s state=%s ips=%s", packet.SenderIP, sender.MAC, sender.State, sender.IPs())
 			}
 
 			if c.notification != nil {
