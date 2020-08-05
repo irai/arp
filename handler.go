@@ -259,15 +259,15 @@ func (c *Handler) ListenAndServe(ctx context.Context) error {
 		if Debug {
 			switch {
 			case packet.Operation == marp.OperationReply:
-				log.Printf("ARP ip=%s reply smac=%s tmac=%s tip=%s", packet.SenderIP, packet.SenderHardwareAddr, packet.TargetHardwareAddr, packet.TargetIP)
+				log.Printf("ARP ip=%s reply recvd smac=%s tmac=%s tip=%s", packet.SenderIP, packet.SenderHardwareAddr, packet.TargetHardwareAddr, packet.TargetIP)
 			case packet.Operation == marp.OperationRequest:
 				switch {
 				case packet.SenderIP.Equal(packet.TargetIP):
-					log.Printf("ARP ip=%s announcement smac=%s tmac=%s tip=%s", packet.SenderIP, packet.SenderHardwareAddr, packet.TargetHardwareAddr, packet.TargetIP)
+					log.Printf("ARP ip=%s announcement recvd smac=%s tmac=%s tip=%s", packet.SenderIP, packet.SenderHardwareAddr, packet.TargetHardwareAddr, packet.TargetIP)
 				case packet.SenderIP.Equal(net.IPv4zero):
-					log.Printf("ARP ip=%s probe smac=%s sip=%s tmac=%s", packet.TargetIP, packet.SenderHardwareAddr, packet.SenderIP, packet.TargetHardwareAddr)
+					log.Printf("ARP ip=%s probe recvd smac=%s sip=%s tmac=%s", packet.TargetIP, packet.SenderHardwareAddr, packet.SenderIP, packet.TargetHardwareAddr)
 				default:
-					log.Printf("ARP ip=%s request smac=%v tmac=%v tip=%v", packet.SenderIP, packet.SenderHardwareAddr, packet.TargetHardwareAddr, packet.TargetIP)
+					log.Printf("ARP ip=%s request recvd who is tip=%s smac=%v tmac=%v", packet.SenderIP, packet.TargetIP, packet.SenderHardwareAddr, packet.TargetHardwareAddr)
 				}
 			default:
 				log.Printf("ARP invalid operation=%v packet=%+v", packet.Operation, packet)
