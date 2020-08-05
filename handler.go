@@ -256,33 +256,18 @@ func (c *Handler) ListenAndServe(ctx context.Context) error {
 			continue
 		}
 
-		// We are interested in ARP Address Conflict Detection packets
-		// Ignore ACD probes - if this is a probe, the sender IP will be Zeros
-		// do nothing as the sender IP is not valid yet.
-		//
-		// +============+===+===========+===========+============+============+===================+===========+
-		// | Type       | op| dstMAC    | srcMAC    | SenderMAC  | SenderIP   | TargetMAC         |  TargetIP |
-		// +============+===+===========+===========+============+============+===================+===========+
-		// | ACD probe  | 1 | broadcast | clientMAC | clientMAC  | 0x00       | 0x00              |  targetIP |
-		// | ACD announ | 1 | broadcast | clientMAC | clientMAC  | clientIP   | ff:ff:ff:ff:ff:ff |  clientIP |
-		// +============+===+===========+===========+============+============+===================+===========+
-		if packet.SenderIP.Equal(net.IPv4zero) {
-			if Debug {
-				log.Printf("ARP acd probe received smac=%v sip=%v tmac=%v tip=%v", packet.SenderHardwareAddr, packet.SenderIP, packet.TargetHardwareAddr, packet.TargetIP)
-			}
-			continue // continue the for loop
-		}
-
 		if Debug {
 			switch {
 			case packet.Operation == marp.OperationReply:
-				log.Printf("ARP ip=%s reply received smac=%v tmac=%v tip=%v", packet.SenderIP, packet.SenderHardwareAddr, packet.TargetHardwareAddr, packet.TargetIP)
+				log.Printf("ARP ip=%s reply smac=%s tmac=%s tip=%s", packet.SenderIP, packet.SenderHardwareAddr, packet.TargetHardwareAddr, packet.TargetIP)
 			case packet.Operation == marp.OperationRequest:
 				switch {
 				case packet.SenderIP.Equal(packet.TargetIP):
-					log.Printf("ARP ip=%s announcement received smac=%v tmac=%v tip=%v", packet.SenderIP, packet.SenderHardwareAddr, packet.TargetHardwareAddr, packet.TargetIP)
+					log.Printf("ARP ip=%s announcement smac=%s tmac=%s tip=%s", packet.SenderIP, packet.SenderHardwareAddr, packet.TargetHardwareAddr, packet.TargetIP)
+				case packet.SenderIP.Equal(net.IPv4zero):
+					log.Printf("ARP ip=%s probe smac=%s sip=%s tmac=%s", packet.TargetIP, packet.SenderHardwareAddr, packet.SenderIP, packet.TargetHardwareAddr)
 				default:
-					log.Printf("ARP ip=%s request received smac=%v tmac=%v tip=%v", packet.SenderIP, packet.SenderHardwareAddr, packet.TargetHardwareAddr, packet.TargetIP)
+					log.Printf("ARP ip=%s request smac=%v tmac=%v tip=%v", packet.SenderIP, packet.SenderHardwareAddr, packet.TargetHardwareAddr, packet.TargetIP)
 				}
 			default:
 				log.Printf("ARP invalid operation=%v packet=%+v", packet.Operation, packet)
@@ -304,8 +289,34 @@ func (c *Handler) ListenAndServe(ctx context.Context) error {
 			continue
 		}
 
-		c.Lock()
+		// if targetIP is a virtual host, we are claiming the ip; reply and return
+		c.RLock()
+		if target := c.table.findVirtualIP(packet.TargetIP); target != nil {
+			mac := target.MAC
+			c.RUnlock()
+			if Debug {
+				log.Printf("ARP ip=%s is virtual - send announcement smac=%v sip=%v tmac=%v",
+					packet.TargetIP, packet.SenderHardwareAddr, packet.SenderIP, packet.TargetHardwareAddr)
+			}
+			c.reply(mac, packet.TargetIP, EthernetBroadcast, packet.TargetIP)
+			continue
+		}
+		c.RUnlock()
 
+		// We are not interested in probe ACD (Address Conflict Detection) packets
+		// if this is a probe, the sender IP will be zeros; do nothing as the sender IP is not valid yet.
+		//
+		// +============+===+===========+===========+============+============+===================+===========+
+		// | Type       | op| dstMAC    | srcMAC    | SenderMAC  | SenderIP   | TargetMAC         |  TargetIP |
+		// +============+===+===========+===========+============+============+===================+===========+
+		// | ACD probe  | 1 | broadcast | clientMAC | clientMAC  | 0x00       | 0x00              |  targetIP |
+		// | ACD announ | 1 | broadcast | clientMAC | clientMAC  | clientIP   | ff:ff:ff:ff:ff:ff |  clientIP |
+		// +============+===+===========+===========+============+============+===================+===========+
+		if packet.SenderIP.Equal(net.IPv4zero) {
+			continue
+		}
+
+		c.Lock()
 		sender := c.table.findByMAC(packet.SenderHardwareAddr)
 		if sender == nil {
 			// If new client, then create a MACEntry in table
@@ -329,20 +340,6 @@ func (c *Handler) ListenAndServe(ctx context.Context) error {
 		switch packet.Operation {
 
 		case marp.OperationRequest:
-
-			// if target is virtual host, we are spoofing the ip; reply and return
-			// search by IP
-			if target := c.table.findVirtualIP(packet.TargetIP); target != nil {
-				mac := target.MAC
-				if Debug {
-					log.Printf("ARP sending reply for virtual ip=%s smac=%v sip=%v tmac=%v",
-						packet.TargetIP, packet.SenderHardwareAddr, packet.SenderIP, packet.TargetHardwareAddr)
-				}
-				c.Unlock()
-				c.reply(mac, packet.TargetIP, EthernetBroadcast, packet.TargetIP)
-				c.Lock()
-				break // break the switch
-			}
 
 			switch sender.State {
 			case StateHunt:
