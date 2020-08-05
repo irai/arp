@@ -277,7 +277,7 @@ func (c *Handler) ListenAndServe(ctx context.Context) error {
 			switch {
 			case packet.Operation == marp.OperationReply:
 				log.Printf("ARP ip=%s reply received smac=%v tmac=%v tip=%v", packet.SenderIP, packet.SenderHardwareAddr, packet.TargetHardwareAddr, packet.TargetIP)
-			case packet.Operation == marp.OperationReply:
+			case packet.Operation == marp.OperationRequest:
 				switch {
 				case packet.SenderIP.Equal(packet.TargetIP):
 					log.Printf("ARP ip=%s announcement received smac=%v tmac=%v tip=%v", packet.SenderIP, packet.SenderHardwareAddr, packet.TargetHardwareAddr, packet.TargetIP)
