@@ -75,6 +75,17 @@ func (c *Handler) StopIPChange(mac net.HardwareAddr) error {
 	return nil
 }
 
+// ClaimIP creates a virtual host to claim the ip
+// When a virtual host exist, the handler will respond to ACD and request packets for the ip
+func (c *Handler) ClaimIP(ip net.IP) {
+	c.Lock()
+	if virtual := c.table.findVirtualIP(ip); virtual == nil {
+		virtual, _ = c.table.upsert(StateVirtualHost, newVirtualHardwareAddr(), ip)
+		virtual.Online = false // indicates spoof goroutine is not running
+	}
+	c.Unlock()
+}
+
 // IPChanged is used to notify that the IP has changed.
 //
 // The package will detect IP changes automatically however some clients do not
