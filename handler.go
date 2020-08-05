@@ -277,7 +277,7 @@ func (c *Handler) ListenAndServe(ctx context.Context) error {
 
 		// Ignore router packets
 		if bytes.Equal(packet.SenderIP, c.config.RouterIP) {
-			if c.routerEntry.MAC == nil { // hack to keep router mac
+			if c.routerEntry.MAC == nil { // store router MAC
 				c.routerEntry.MAC = dupMAC(packet.SenderHardwareAddr)
 				c.routerEntry.ipArray[0] = IPEntry{IP: c.config.RouterIP}
 			}
