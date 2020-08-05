@@ -92,7 +92,7 @@ func (c *Handler) IPChanged(mac net.HardwareAddr, clientIP net.IP) {
 	c.RUnlock()
 
 	if Debug {
-		log.Printf("ARP new mac=%s - validating", mac)
+		log.Printf("ARP ip%s validating for mac=%s", clientIP, mac)
 	}
 	if err := c.Request(c.config.HostMAC, c.config.HostIP, EthernetBroadcast, clientIP); err != nil {
 		log.Printf("ARP request failed mac=%s: %s", mac, err)
@@ -102,10 +102,10 @@ func (c *Handler) IPChanged(mac net.HardwareAddr, clientIP net.IP) {
 		for i := 0; i < 5; i++ {
 			time.Sleep(time.Second * 1)
 			c.RLock()
-			if entry := c.table.findByMAC(mac); entry != nil && entry.findIP(clientIP) != nil {
+			if entry := c.table.findByMAC(mac); entry != nil && entry.IP().Equal(clientIP) {
 				c.RUnlock()
 				if Debug {
-					log.Printf("ARP found mac=%s ips=%s", entry.MAC, entry.IPs())
+					log.Printf("ARP ip=%s found for mac=%s ips=%s", entry.IP(), entry.MAC, entry.IPs())
 				}
 				return
 			}
@@ -116,7 +116,7 @@ func (c *Handler) IPChanged(mac net.HardwareAddr, clientIP net.IP) {
 				log.Printf("ARP request 2 failed mac=%s ip=%s: %s", mac, clientIP, err)
 			}
 		}
-		log.Printf("ARP could not detect ip=%s mac=%s", clientIP, mac)
+		log.Printf("ARP ip=%s not detect for mac=%s", clientIP, mac)
 
 		c.RLock()
 		c.table.printTable()
