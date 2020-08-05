@@ -76,12 +76,10 @@ func Test_Delete(t *testing.T) {
 
 	h, _ := testHandler(t)
 	h.table.upsert(StateNormal, mac1, ip4)
-	MACEntry2, _ := h.table.upsert(StateVirtualHost, mac2, nil)
-	MACEntry2.updateIP(ip2)
-	MACEntry2.updateIP(ip3)
-	h.table.upsert(StateNormal, mac3, ip4)
+	MACEntry2, _ := h.table.upsert(StateVirtualHost, newVirtualHardwareAddr(), ip2)
+	h.table.upsert(StateNormal, mac3, ip3)
 
-	if len(h.table.macTable) != 3 || MACEntry2 != h.table.findByMAC(mac2) || MACEntry2 != h.table.findVirtualIP(ip2) || MACEntry2 != h.table.findVirtualIP(ip3) {
+	if len(h.table.macTable) != 3 || MACEntry2 != h.table.findByMAC(MACEntry2.MAC) || MACEntry2 != h.table.findVirtualIP(ip2) {
 		t.Error("expected cannot find MACEntry ", mac2.String(), ip2)
 	}
 	h.table.delete(MACEntry2.MAC)
@@ -93,6 +91,12 @@ func Test_Delete(t *testing.T) {
 	MACEntry2, _ = h.table.upsert(StateNormal, mac2, ip2)
 	if len(h.table.macTable) != 3 || MACEntry2 != h.table.findByMAC(mac2) || MACEntry2 != h.table.findByIP(ip2) {
 		t.Error("expected cannot find MACEntry ", mac2.String(), ip2)
+	}
+	h.table.delete(mac3)
+
+	h.ClaimIP(ip4)
+	if len(h.table.macTable) != 3 || h.table.findVirtualIP(ip4) == nil {
+		t.Error("expected cannot find virtual MACEntry 4", len(h.table.macTable), h.table.findVirtualIP(ip4))
 	}
 }
 
