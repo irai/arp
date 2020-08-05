@@ -256,8 +256,16 @@ func (c *Handler) ListenAndServe(ctx context.Context) error {
 			continue
 		}
 
+		// We are interested in ARP Address Conflict Detection packets
 		// Ignore ACD probes - if this is a probe, the sender IP will be Zeros
 		// do nothing as the sender IP is not valid yet.
+		//
+		// +============+===+===========+===========+============+============+===================+===========+
+		// | Type       | op| dstMAC    | srcMAC    | SenderMAC  | SenderIP   | TargetMAC         |  TargetIP |
+		// +============+===+===========+===========+============+============+===================+===========+
+		// | ACD probe  | 1 | broadcast | clientMAC | clientMAC  | 0x00       | 0x00              |  targetIP |
+		// | ACD announ | 1 | broadcast | clientMAC | clientMAC  | clientIP   | ff:ff:ff:ff:ff:ff |  clientIP |
+		// +============+===+===========+===========+============+============+===================+===========+
 		if packet.SenderIP.Equal(net.IPv4zero) {
 			if Debug {
 				log.Printf("ARP acd probe received smac=%v sip=%v tmac=%v tip=%v", packet.SenderHardwareAddr, packet.SenderIP, packet.TargetHardwareAddr, packet.TargetIP)
@@ -335,41 +343,16 @@ func (c *Handler) ListenAndServe(ctx context.Context) error {
 
 			switch sender.State {
 			case StateHunt:
-				/***
-				// We are only interested in ARP Address Conflict Detection packets:
-				//
-				// +============+===+===========+===========+============+============+===================+===========+
-				// | Type       | op| dstMAC    | srcMAC    | SenderMAC  | SenderIP   | TargetMAC         |  TargetIP |
-				// +============+===+===========+===========+============+============+===================+===========+
-				// | ACD probe  | 1 | broadcast | clientMAC | clientMAC  | 0x00       | 0x00              |  targetIP |
-				// | ACD announ | 1 | broadcast | clientMAC | clientMAC  | clientIP   | ff:ff:ff:ff:ff:ff |  clientIP |
-				// +============+===+===========+===========+============+============+===================+===========+
-				if !packet.SenderIP.Equal(packet.TargetIP) {
-					break // break the switch
-				}
-				***/
 
-				if _, found := sender.updateIP(dupIP(packet.SenderIP)); found { // is this an existing IP?
-					if Debug {
-						log.Printf("ARP client attempting to get same ip=%s mac=%s ips=%s", packet.TargetIP, sender.MAC, sender.IPs())
-					}
-					break // break the switch
+				// If this is a new IP, stop hunting it.
+				// The spoof goroutine will detect the mac changed to normal and terminate.
+				if _, found := sender.updateIP(dupIP(packet.SenderIP)); !found {
+					sender.State = StateNormal
+					notify++
 				}
-
-				// This is a new address, stop hunting it. The spoof function will detect the mac changed to normal
-				// and delete the virtual IP.
-				//
-				sender.State = StateNormal
-				if Debug {
-					log.Printf("ARP client state=%v mac=%v updated IP to %s", StateHunt, sender.MAC, packet.TargetIP)
-				}
-				notify++
 
 			case StateNormal:
 				if _, found := sender.updateIP(dupIP(packet.SenderIP)); !found {
-					if Debug {
-						log.Printf("ARP client state=%v mac=%v updated IP to %s", sender.State, sender.MAC, packet.TargetIP)
-					}
 					notify++
 				}
 

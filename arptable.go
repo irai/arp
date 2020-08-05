@@ -150,7 +150,7 @@ func (e *MACEntry) updateIP(ip net.IP) (entry IPEntry, found bool) {
 		// e.freeIPs() // delete previous IPs
 	}
 
-	// push all down by one
+	// push all entries down by one
 	i := nIPs - 1
 	for i > 0 {
 		e.ipArray[i] = e.ipArray[i-1]
@@ -159,6 +159,9 @@ func (e *MACEntry) updateIP(ip net.IP) (entry IPEntry, found bool) {
 	entry = IPEntry{IP: ip.To4(), LastUpdated: now}
 	e.ipArray[0] = entry
 	e.LastUpdated = now
+	if Debug {
+		log.Printf("ARP ip=%s updated to %s for mac=%s state=%s ips=%s", e.ipArray[1].IP, ip, e.MAC, e.State, e.IPs())
+	}
 	return entry, false
 }
 
