@@ -134,20 +134,19 @@ func (t *arpTable) getTable() (table []MACEntry) {
 	return table
 }
 
-func (e *MACEntry) updateIP(ip net.IP) (entry IPEntry, found bool) {
+func (e *MACEntry) updateIP(ip net.IP) (found bool) {
 
 	now := time.Now()
 	// common path - IP is the same
 	if ip.Equal(e.ipArray[0].IP) {
 		e.ipArray[0].LastUpdated = now
 		e.LastUpdated = now
-		return e.ipArray[0], true
+		return true
 	}
 
 	// If in hunt state, ignore any previous IP
 	if e.State == StateHunt && e.findIP(ip) != nil {
-		return IPEntry{}, true
-		// e.freeIPs() // delete previous IPs
+		return true
 	}
 
 	// push all entries down by one
@@ -156,13 +155,13 @@ func (e *MACEntry) updateIP(ip net.IP) (entry IPEntry, found bool) {
 		e.ipArray[i] = e.ipArray[i-1]
 		i = i - 1
 	}
-	entry = IPEntry{IP: ip.To4(), LastUpdated: now}
-	e.ipArray[0] = entry
+	e.ipArray[0].IP = ip.To4()
+	e.ipArray[0].LastUpdated = now
 	e.LastUpdated = now
 	if Debug {
 		log.Printf("ARP ip=%s updated to %s for mac=%s state=%s ips=%s", e.ipArray[1].IP, ip, e.MAC, e.State, e.IPs())
 	}
-	return entry, false
+	return false
 }
 
 func (e *MACEntry) freeIPs() {
@@ -191,7 +190,7 @@ func (t *arpTable) upsert(state arpState, mac net.HardwareAddr, ip net.IP) (entr
 		return e, found
 	}
 
-	_, ok := e.updateIP(ip)
+	ok := e.updateIP(ip)
 	if found && ok {
 		return e, true
 	}
