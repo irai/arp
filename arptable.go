@@ -97,13 +97,13 @@ func (t *arpTable) findByMAC(mac net.HardwareAddr) *MACEntry {
 	return entry
 }
 
-// findByIP return the MACEntry or nil if not found.
+// findVirtualIP returns the virtual MACEntry or nil if not found.
 func (t *arpTable) findVirtualIP(ip net.IP) *MACEntry {
 	for _, v := range t.macTable {
 		if v.State != StateVirtualHost {
 			continue
 		}
-		if v.findIP(ip) != nil {
+		if v.IP().Equal(ip) {
 			return v
 		}
 	}
