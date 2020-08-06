@@ -159,7 +159,7 @@ func (e *MACEntry) updateIP(ip net.IP) (found bool) {
 	e.ipArray[0].LastUpdated = now
 	e.LastUpdated = now
 	if Debug {
-		log.Printf("ARP ip=%s updated to %s for mac=%s state=%s ips=%s", e.ipArray[1].IP, ip, e.MAC, e.State, e.IPs())
+		log.Printf("ARP ip=%s updated mac=%s state=%s ips=%s", ip, e.MAC, e.State, e.IPs())
 	}
 	return false
 }
