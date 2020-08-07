@@ -47,10 +47,6 @@ func (c *Handler) probeOnlineLoop(ctx context.Context, interval time.Duration) e
 					continue
 				}
 				if entry.LastUpdated.Before(refreshCutoff) {
-					// Ignore empty entries and link local
-					// if e.IP.IsLinkLocalUnicast() {
-					// continue
-					// }
 					for _, v := range entry.IPs() {
 						if Debug {
 							log.Printf("ARP ip=%s online? mac=%s", v, entry.MAC)
