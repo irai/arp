@@ -67,7 +67,7 @@ func New(config Config) (c *Handler, err error) {
 
 func newHandler(config Config) (c *Handler) {
 	c = &Handler{}
-	c.table = newARPTable()
+	c.table, _ = loadARPProcTable() // load linux proc table
 	c.config.NIC = config.NIC
 	c.config.HostMAC = config.HostMAC
 	c.config.HostIP = config.HostIP.To4()
@@ -93,6 +93,7 @@ func newHandler(config Config) (c *Handler) {
 
 	if Debug {
 		log.Printf("ARP Config %s", c.config)
+		c.PrintTable()
 	}
 
 	return c
