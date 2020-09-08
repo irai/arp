@@ -28,24 +28,20 @@ func loadARPProcTable() (table *arpTable, err error) {
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
-
-		// get field containing gateway address
-		tokens := strings.Split(scanner.Text(), "\t")
+		tokens := strings.Fields(scanner.Text())
 		if len(tokens) < 4 {
 			continue
 		}
-
 		ip := net.ParseIP(tokens[0]).To4()
 		if ip.IsUnspecified() {
 			continue
 		}
-
 		mac, err := net.ParseMAC(tokens[3])
 		if err != nil {
 			continue
 		}
-
-		table.upsert(StateNormal, mac, ip)
+		entry, _ := table.upsert(StateNormal, mac, ip)
+		entry.Online = true
 	}
 
 	return table, nil
