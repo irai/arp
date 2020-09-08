@@ -148,9 +148,6 @@ func (c *Handler) Close() {
 
 // ListenAndServe listen for ARP packets and action each.
 //
-// parameters:
-//   scanInterval - frequency to poll existing MACs to ensure they are online
-//
 // When a new MAC is detected, it is automatically added to the ARP table and marked as online.
 // Use packet buffer and selectivelly copy mac and ip if we need to keep it
 //
