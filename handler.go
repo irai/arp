@@ -114,12 +114,24 @@ func (c *Handler) AddNotificationChannel(notification chan<- MACEntry) {
 	}()
 }
 
-// FindMAC returns a MACEntry or nil if not found
+// FindMAC returns a MACEntry or empty if not found
 func (c *Handler) FindMAC(mac net.HardwareAddr) (entry MACEntry, found bool) {
 	c.RLock()
 	defer c.RUnlock()
 
 	e := c.table.findByMAC(mac)
+	if e == nil {
+		return MACEntry{}, false
+	}
+	return *e, true
+}
+
+// FindIP returns a MACEntry or empty if not found
+func (c *Handler) FindIP(ip net.IP) (entry MACEntry, found bool) {
+	c.RLock()
+	defer c.RUnlock()
+
+	e := c.table.findByIP(ip)
 	if e == nil {
 		return MACEntry{}, false
 	}
