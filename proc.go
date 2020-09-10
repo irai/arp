@@ -2,6 +2,7 @@ package arp
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"net"
 	"os"
@@ -37,7 +38,7 @@ func loadARPProcTable() (table *arpTable, err error) {
 			continue
 		}
 		mac, err := net.ParseMAC(tokens[3])
-		if err != nil {
+		if err != nil || bytes.Equal(mac, net.HardwareAddr{0, 0, 0, 0, 0, 0}) || bytes.Equal(mac, net.HardwareAddr{}) {
 			continue
 		}
 		entry, _ := table.upsert(StateNormal, mac, ip)
