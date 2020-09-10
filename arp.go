@@ -142,7 +142,9 @@ func (c *Handler) WhoIs(ip net.IP) (MACEntry, error) {
 	c.RUnlock()
 
 	for i := 0; i < 3; i++ {
-		c.Request(c.config.HostMAC, c.config.HostIP, EthernetBroadcast, ip)
+		if err := c.Request(c.config.HostMAC, c.config.HostIP, EthernetBroadcast, ip); err != nil {
+			return MACEntry{}, fmt.Errorf("ARP WhoIs error: %w", err)
+		}
 		time.Sleep(time.Millisecond * 50)
 
 		c.RLock()
