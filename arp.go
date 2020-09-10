@@ -5,12 +5,16 @@ import (
 	"net"
 	"time"
 
+	"errors"
 	"log"
 
 	marp "github.com/mdlayher/arp"
 )
 
 var (
+	// ErrNotFound is returned when MAC not found
+	ErrNotFound = errors.New("not found")
+
 	writeTimeout, _ = time.ParseDuration("100ms")
 	scanTimeout, _  = time.ParseDuration("5s")
 
@@ -167,5 +171,5 @@ func (c *Handler) WhoIs(ip net.IP) (MACEntry, error) {
 		c.table.printTable()
 		c.RUnlock()
 	}
-	return MACEntry{}, fmt.Errorf("not found")
+	return MACEntry{}, ErrNotFound
 }
