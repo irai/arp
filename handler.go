@@ -190,9 +190,9 @@ func (c *Handler) ListenAndServe(ctx context.Context) error {
 		wg.Add(1)
 		if err := c.scanLoop(c.ctx, c.config.FullNetworkScanInterval); err != nil {
 			log.Print("ARP goroutine scanLoop terminated unexpectedly", err)
+			c.Close() // force error in main loop
 		}
 		wg.Done()
-		c.Close()
 		if Debug {
 			log.Print("ARP goroutine scanLoop ended")
 		}
@@ -203,9 +203,9 @@ func (c *Handler) ListenAndServe(ctx context.Context) error {
 		wg.Add(1)
 		if err := c.probeOnlineLoop(c.ctx, c.config.ProbeInterval); err != nil {
 			log.Print("ARP goroutine probeOnlineLoop terminated unexpectedly", err)
+			c.Close() // force error in main loop
 		}
 		wg.Done()
-		c.Close()
 		if Debug {
 			log.Print("ARP goroutine probeOnlineLoop ended")
 		}
@@ -216,17 +216,25 @@ func (c *Handler) ListenAndServe(ctx context.Context) error {
 		wg.Add(1)
 		if err := c.purgeLoop(c.ctx, c.config.OfflineDeadline, c.config.PurgeDeadline); err != nil {
 			log.Print("ARP ListenAndServer purgeLoop terminated unexpectedly", err)
+			c.Close() // force error in main loop
 		}
 		wg.Done()
-		c.Close()
 		if Debug {
 			log.Print("ARP goroutine purgeLoop ended")
 		}
 	}()
 
 	go func() {
+		wg.Add(1)
 		time.Sleep(time.Millisecond * 100) // Time to start read loop below
-		c.ScanNetwork(c.ctx, c.config.HomeLAN)
+		if err := c.ScanNetwork(c.ctx, c.config.HomeLAN); err != nil {
+			log.Print("ARP ListenAndServer scanNetwork terminated unexpectedly", err)
+			c.Close() // force error in main loop
+		}
+		wg.Done()
+		if Debug {
+			log.Print("ARP goroutine scanNetwork ended")
+		}
 	}()
 
 	// Loop and wait for ARP packets
