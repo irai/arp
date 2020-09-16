@@ -203,8 +203,8 @@ func (c *Handler) ListenAndServe(ctx context.Context) error {
 		wg.Add(1)
 		if err := c.probeOnlineLoop(c.ctx, c.config.ProbeInterval); err != nil {
 			log.Print("ARP goroutine probeOnlineLoop terminated unexpectedly", err)
-			c.Close() // force error in main loop
 		}
+		c.Close() // close conn to force error in main loopi to finish quickly
 		wg.Done()
 		if Debug {
 			log.Print("ARP goroutine probeOnlineLoop ended")
