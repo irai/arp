@@ -14,13 +14,15 @@ import (
 )
 
 // Config holds configuration parameters
+//
+// Set FullNetworkScanInterval = 0 to avoid network scan
 type Config struct {
 	NIC                     string           `yaml:"-"`
 	HostMAC                 net.HardwareAddr `yaml:"-"`
 	HostIP                  net.IP           `yaml:"-"`
 	RouterIP                net.IP           `yaml:"-"`
 	HomeLAN                 net.IPNet        `yaml:"-"`
-	FullNetworkScanInterval time.Duration    `yaml:"-"`
+	FullNetworkScanInterval time.Duration    `yaml:"-"` // Set it to zero if no scan required
 	ProbeInterval           time.Duration    `yaml:"-"` // how often to probe if IP is online
 	OfflineDeadline         time.Duration    `yaml:"-"` // mark offline if more than OfflineInte
 	PurgeDeadline           time.Duration    `yaml:"-"`
@@ -185,18 +187,20 @@ func (c *Handler) ListenAndServe(ctx context.Context) error {
 	myctx, cancel := context.WithCancel(ctx)
 	c.ctx = myctx
 
-	// continuosly scan for network devices
-	go func() {
-		wg.Add(1)
-		if err := c.scanLoop(c.ctx, c.config.FullNetworkScanInterval); err != nil {
-			log.Print("ARP goroutine scanLoop terminated unexpectedly", err)
-			c.Close() // force error in main loop
-		}
-		wg.Done()
-		if Debug {
-			log.Print("ARP goroutine scanLoop ended")
-		}
-	}()
+	if c.config.FullNetworkScanInterval != 0 {
+		// continuosly scan for network devices
+		go func() {
+			wg.Add(1)
+			if err := c.scanLoop(c.ctx, c.config.FullNetworkScanInterval); err != nil {
+				log.Print("ARP goroutine scanLoop terminated unexpectedly", err)
+				c.Close() // force error in main loop
+			}
+			wg.Done()
+			if Debug {
+				log.Print("ARP goroutine scanLoop ended")
+			}
+		}()
+	}
 
 	// continously probe for online reply
 	go func() {
@@ -225,16 +229,18 @@ func (c *Handler) ListenAndServe(ctx context.Context) error {
 	}()
 
 	// Do a full scan on start
-	go func() {
-		time.Sleep(time.Millisecond * 100) // Time to start read loop below
-		if err := c.ScanNetwork(c.ctx, c.config.HomeLAN); err != nil {
-			log.Print("ARP ListenAndServer scanNetwork terminated unexpectedly", err)
-			c.Close() // force error in main loop
-		}
-		if Debug {
-			log.Print("ARP goroutine scanNetwork ended")
-		}
-	}()
+	if c.config.FullNetworkScanInterval != 0 {
+		go func() {
+			time.Sleep(time.Millisecond * 100) // Time to start read loop below
+			if err := c.ScanNetwork(c.ctx, c.config.HomeLAN); err != nil {
+				log.Print("ARP ListenAndServer scanNetwork terminated unexpectedly", err)
+				c.Close() // force error in main loop
+			}
+			if Debug {
+				log.Print("ARP goroutine scanNetwork ended")
+			}
+		}()
+	}
 
 	// Loop and wait for ARP packets
 	for {
