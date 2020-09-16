@@ -185,7 +185,7 @@ func (c *Handler) ListenAndServe(ctx context.Context) error {
 	myctx, cancel := context.WithCancel(ctx)
 	c.ctx = myctx
 
-	// to continuosly scan for network devices
+	// continuosly scan for network devices
 	go func() {
 		wg.Add(1)
 		if err := c.scanLoop(c.ctx, c.config.FullNetworkScanInterval); err != nil {
@@ -224,14 +224,13 @@ func (c *Handler) ListenAndServe(ctx context.Context) error {
 		}
 	}()
 
+	// Do a full scan on start
 	go func() {
-		wg.Add(1)
 		time.Sleep(time.Millisecond * 100) // Time to start read loop below
 		if err := c.ScanNetwork(c.ctx, c.config.HomeLAN); err != nil {
 			log.Print("ARP ListenAndServer scanNetwork terminated unexpectedly", err)
 			c.Close() // force error in main loop
 		}
-		wg.Done()
 		if Debug {
 			log.Print("ARP goroutine scanNetwork ended")
 		}
@@ -244,7 +243,7 @@ func (c *Handler) ListenAndServe(ctx context.Context) error {
 			cancel()
 			wg.Wait()
 			if Debug {
-				log.Print("ARP goroutine purgeLoop ended")
+				log.Print("ARP goroutine ListenAndServe ended")
 			}
 			return nil
 		}
