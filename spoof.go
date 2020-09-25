@@ -175,6 +175,10 @@ func (c *Handler) spoofLoop(ctx context.Context, client *MACEntry, ip net.IP) {
 		if client == nil || client.State != StateHunt {
 			log.Printf("ARP claim end ip=%s mac=%s client=%s repeat=%v duration=%v", ip, virtual.MAC, mac, nTimes, time.Now().Sub(startTime))
 			virtual.Online = false // goroutine ended
+			if c.routerEntry.MAC != nil {
+				c.announceUnicast(c.routerEntry.MAC, c.config.RouterIP, mac) // Reset target arp table
+				c.announceUnicast(c.routerEntry.MAC, c.config.RouterIP, mac) // Reset target arp table
+			}
 			c.Unlock()
 			return
 		}
