@@ -21,7 +21,7 @@ const nIPs = 4
 // MACEntry holds a mac to ip MACEntry
 type MACEntry struct {
 	MAC         net.HardwareAddr
-	ipArray     [nIPs]IPEntry
+	IPArray     [nIPs]IPEntry
 	State       arpState
 	LastUpdated time.Time
 	Online      bool
@@ -29,23 +29,23 @@ type MACEntry struct {
 
 // IP returns the last IP detected
 func (e *MACEntry) IP() net.IP {
-	return e.ipArray[0].IP
+	return e.IPArray[0].IP
 }
 
 // IPs return list of IPs associated with this entry
 func (e *MACEntry) IPs() []net.IP {
 	ips := make([]net.IP, 0, nIPs)
-	for i := range e.ipArray {
-		if e.ipArray[i].IP != nil {
-			ips = append(ips, e.ipArray[i].IP)
+	for i := range e.IPArray {
+		if e.IPArray[i].IP != nil {
+			ips = append(ips, e.IPArray[i].IP)
 		}
 	}
 	return ips
 }
 
 func (e *MACEntry) findIP(ip net.IP) net.IP {
-	for i := range e.ipArray {
-		if ip.Equal(e.ipArray[i].IP) {
+	for i := range e.IPArray {
+		if ip.Equal(e.IPArray[i].IP) {
 			return ip
 		}
 	}
@@ -138,8 +138,8 @@ func (e *MACEntry) updateIP(ip net.IP) (found bool) {
 
 	now := time.Now()
 	// common path - IP is the same
-	if ip.Equal(e.ipArray[0].IP) {
-		e.ipArray[0].LastUpdated = now
+	if ip.Equal(e.IPArray[0].IP) {
+		e.IPArray[0].LastUpdated = now
 		e.LastUpdated = now
 		return true
 	}
@@ -152,11 +152,11 @@ func (e *MACEntry) updateIP(ip net.IP) (found bool) {
 	// push all entries down by one
 	i := nIPs - 1
 	for i > 0 {
-		e.ipArray[i] = e.ipArray[i-1]
+		e.IPArray[i] = e.IPArray[i-1]
 		i = i - 1
 	}
-	e.ipArray[0].IP = ip.To4()
-	e.ipArray[0].LastUpdated = now
+	e.IPArray[0].IP = ip.To4()
+	e.IPArray[0].LastUpdated = now
 	e.LastUpdated = now
 	if Debug {
 		log.Printf("ARP ip=%s updated mac=%s state=%s ips=%s", ip, e.MAC, e.State, e.IPs())
@@ -165,8 +165,8 @@ func (e *MACEntry) updateIP(ip net.IP) (found bool) {
 }
 
 func (e *MACEntry) freeIPs() {
-	for i := range e.ipArray {
-		e.ipArray[i] = IPEntry{}
+	for i := range e.IPArray {
+		e.IPArray[i] = IPEntry{}
 	}
 }
 
