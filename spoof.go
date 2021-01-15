@@ -190,7 +190,7 @@ func (c *Handler) spoofLoop(ctx context.Context, client *MACEntry, ip net.IP) {
 		c.forceSpoof(mac, ip)
 
 		// Use VirtualHost to request ownership of the IP; try to force target to acquire another IP
-		c.forceAnnouncement(virtual.MAC, ip)
+		c.forceAnnouncement(client.MAC, virtual.MAC, ip)
 
 		if nTimes%16 == 0 {
 			log.Printf("ARP claim ip=%s mac=%s client=%s repeat=%v duration=%v", ip, virtual.MAC, mac, nTimes, time.Now().Sub(startTime))
@@ -217,7 +217,7 @@ func (c *Handler) forceSpoof(mac net.HardwareAddr, ip net.IP) error {
 
 	// Announce to target that we own the router IP
 	// Unicast announcement - this will not work for all devices but should cause no pain
-	err := c.announceUnicast(c.config.HostMAC, c.config.RouterIP, mac)
+	err := c.announceUnicast(mac, c.config.HostMAC, c.config.RouterIP)
 	if err != nil {
 		log.Printf("ARP error send announcement packet mac=%s ip=%s: %s", mac, ip, err)
 		return err
@@ -237,14 +237,15 @@ func (c *Handler) forceSpoof(mac net.HardwareAddr, ip net.IP) error {
 }
 
 // forceAnnounce send a ARP packets to tell the network we are using the IP.
-func (c *Handler) forceAnnouncement(mac net.HardwareAddr, ip net.IP) error {
-	err := c.announce(mac, ip)
+func (c *Handler) forceAnnouncement(dstEther net.HardwareAddr, mac net.HardwareAddr, ip net.IP) error {
+	err := c.announceUnicast(dstEther, mac, ip)
 	if err != nil {
 		log.Printf("ARP error send announcement packet mac=%s ip=%s: %s", mac, ip, err)
 	}
 
 	// Send 4 gratuitous ARP reply : Log the first one only
-	err = c.Reply(mac, ip, EthernetBroadcast, ip) // Send gratuitous ARP reply
+	// err = c.Reply(mac, ip, EthernetBroadcast, ip) // Send broadcast gratuitous ARP reply
+	err = c.replyWithDstEthernet(dstEther, mac, ip, EthernetBroadcast, ip) // Send gratuitous ARP reply - unicast to target
 	for i := 0; i < 3; i++ {
 		if err != nil {
 			log.Printf("ARP error send gratuitous packet mac=%s ip=%s: %s", mac, ip, err)
@@ -252,7 +253,7 @@ func (c *Handler) forceAnnouncement(mac net.HardwareAddr, ip net.IP) error {
 		time.Sleep(time.Millisecond * 10)
 
 		// Dont show in log
-		err = c.reply(mac, ip, EthernetBroadcast, ip) // Send gratuitous ARP reply
+		err = c.replyWithDstEthernet(dstEther, mac, ip, EthernetBroadcast, ip) // Send gratuitous ARP reply
 	}
 
 	return nil

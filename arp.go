@@ -80,7 +80,7 @@ func (c *Handler) Reply(srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr net.
 	return c.reply(srcHwAddr, srcIP, dstHwAddr, dstIP)
 }
 
-func (c *Handler) reply(srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr net.HardwareAddr, dstIP net.IP) error {
+func (c *Handler) replyWithDstEthernet(dstEther net.HardwareAddr, srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr net.HardwareAddr, dstIP net.IP) error {
 	p, err := marp.NewPacket(marp.OperationReply, srcHwAddr, srcIP, dstHwAddr, dstIP)
 	if err != nil {
 		return err
@@ -90,7 +90,11 @@ func (c *Handler) reply(srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr net.
 		return err
 	}
 
-	return c.client.WriteTo(p, dstHwAddr)
+	return c.client.WriteTo(p, dstEther)
+}
+
+func (c *Handler) reply(srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr net.HardwareAddr, dstIP net.IP) error {
+	return c.replyWithDstEthernet(dstHwAddr, srcHwAddr, srcIP, dstHwAddr, dstIP)
 }
 
 // Probe will send an arp request broadcast on the local link.
@@ -140,12 +144,13 @@ func (c *Handler) announceWithDstEthernet(dstEther net.HardwareAddr, mac net.Har
 		time.Sleep(time.Second * 1)
 		c.requestWithDstEthernet(dstEther, mac, ip, targetMac, ip)
 		time.Sleep(time.Second * 1)
+		c.requestWithDstEthernet(dstEther, mac, ip, targetMac, ip)
 	}()
 	return err
 }
 
-func (c *Handler) announceUnicast(mac net.HardwareAddr, ip net.IP, targetMac net.HardwareAddr) (err error) {
-	return c.announceWithDstEthernet(targetMac, mac, ip, targetMac)
+func (c *Handler) announceUnicast(dstEther net.HardwareAddr, mac net.HardwareAddr, ip net.IP) (err error) {
+	return c.announceWithDstEthernet(dstEther, mac, ip, dstEther)
 }
 
 // WhoIs will send a request packet to get the MAC address for the IP. Retry 3 times.
