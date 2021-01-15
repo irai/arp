@@ -1,6 +1,7 @@
 package arp
 
 import (
+	"bytes"
 	"fmt"
 	"net"
 	"time"
@@ -22,7 +23,7 @@ var (
 	EthernetBroadcast = net.HardwareAddr{0xff, 0xff, 0xff, 0xff, 0xff, 0xff}
 )
 
-func (c *Handler) request(srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr net.HardwareAddr, dstIP net.IP) error {
+func (c *Handler) requestWithDstEthernet(dstEther net.HardwareAddr, srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr net.HardwareAddr, dstIP net.IP) error {
 	arp, err := marp.NewPacket(marp.OperationRequest, srcHwAddr, srcIP, dstHwAddr, dstIP)
 	if err != nil {
 		return err
@@ -32,7 +33,11 @@ func (c *Handler) request(srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr ne
 		return err
 	}
 
-	return c.client.WriteTo(arp, EthernetBroadcast)
+	return c.client.WriteTo(arp, dstEther)
+}
+
+func (c *Handler) request(srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr net.HardwareAddr, dstIP net.IP) error {
+	return c.requestWithDstEthernet(EthernetBroadcast, srcHwAddr, srcIP, dstHwAddr, dstIP)
 }
 
 // Request send ARP request from src to dst
@@ -119,17 +124,28 @@ func (c *Handler) probeUnicast(mac net.HardwareAddr, ip net.IP) error {
 // legitimately using the IP address immediately after sending the first
 // of the two ARP Announcements;
 func (c *Handler) announce(mac net.HardwareAddr, ip net.IP) error {
-	return c.announceUnicast(mac, ip, EthernetBroadcast)
+	return c.announceWithDstEthernet(EthernetBroadcast, mac, ip, EthernetBroadcast)
 }
 
-func (c *Handler) announceUnicast(mac net.HardwareAddr, ip net.IP, targetMac net.HardwareAddr) (err error) {
-	err = c.Request(mac, ip, targetMac, ip)
+func (c *Handler) announceWithDstEthernet(dstEther net.HardwareAddr, mac net.HardwareAddr, ip net.IP, targetMac net.HardwareAddr) (err error) {
+	if Debug {
+		if bytes.Equal(dstEther, EthernetBroadcast) {
+			log.Printf("ARP send announcement - I am ip=%s mac=%s", ip, mac)
+		} else {
+			log.Printf("ARP send announcement unicast - I am ip=%s mac=%s to=%s", ip, mac, dstEther)
+		}
+	}
+	err = c.requestWithDstEthernet(dstEther, mac, ip, targetMac, ip)
 	go func() {
 		time.Sleep(time.Second * 1)
-		c.request(mac, ip, targetMac, ip)
+		c.requestWithDstEthernet(dstEther, mac, ip, targetMac, ip)
 		time.Sleep(time.Second * 1)
 	}()
 	return err
+}
+
+func (c *Handler) announceUnicast(mac net.HardwareAddr, ip net.IP, targetMac net.HardwareAddr) (err error) {
+	return c.announceWithDstEthernet(targetMac, mac, ip, targetMac)
 }
 
 // WhoIs will send a request packet to get the MAC address for the IP. Retry 3 times.
