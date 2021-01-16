@@ -189,8 +189,10 @@ func (c *Handler) spoofLoop(ctx context.Context, client *MACEntry, ip net.IP) {
 		// Use virtual IP as it is guaranteed to not change.
 		c.forceSpoof(mac, ip)
 
-		// Use VirtualHost to request ownership of the IP; try to force target to acquire another IP
-		c.forceAnnouncement(mac, virtual.MAC, ip)
+		// Use VirtualHost to claim ownership of the IP and force target to acquire another IP
+		if nTimes < 5 {
+			c.forceAnnouncement(mac, virtual.MAC, ip)
+		}
 
 		if nTimes%16 == 0 {
 			log.Printf("ARP claim ip=%s mac=%s client=%s repeat=%v duration=%v", ip, virtual.MAC, mac, nTimes, time.Now().Sub(startTime))
@@ -205,19 +207,18 @@ func (c *Handler) spoofLoop(ctx context.Context, client *MACEntry, ip net.IP) {
 	}
 }
 
-// forceSpoof send gratuitous ARP packet to spoof client MAC table to send router packets to host instead of the router
+// forceSpoof send announcement and gratuitous ARP packet to spoof client MAC arp table to send router packets to
+// host instead of the router
 // i.e.  192.168.0.1->RouterMAC becames 192.168.0.1->HostMAC
 //
 // The client ARP table is refreshed often and only last for a short while (few minutes)
 // hence the goroutine that re-arp clients
-// To make sure the cache stays poisoned, replay every 10 seconds with a loop.
-//
-//
+// To make sure the cache stays poisoned, replay every 5 seconds with a loop.
 func (c *Handler) forceSpoof(mac net.HardwareAddr, ip net.IP) error {
 
 	// Announce to target that we own the router IP
-	// Unicast announcement - this will not work for all devices but should cause no pain
-	err := c.announceUnicast(mac, c.config.HostMAC, c.config.RouterIP)
+	// This will update the target arp table with our mac
+	err := c.announce(mac, c.config.HostMAC, c.config.RouterIP, EthernetBroadcast, 2)
 	if err != nil {
 		log.Printf("ARP error send announcement packet mac=%s ip=%s: %s", mac, ip, err)
 		return err
@@ -238,12 +239,12 @@ func (c *Handler) forceSpoof(mac net.HardwareAddr, ip net.IP) error {
 
 // forceAnnounce send a ARP packets to tell the network we are using the IP.
 func (c *Handler) forceAnnouncement(dstEther net.HardwareAddr, mac net.HardwareAddr, ip net.IP) error {
-	err := c.announceUnicast(dstEther, mac, ip)
+	err := c.announce(dstEther, mac, ip, EthernetBroadcast, 4) // many repeats to force client to reaquire IP
 	if err != nil {
 		log.Printf("ARP error send announcement packet mac=%s ip=%s: %s", mac, ip, err)
 	}
 
-	// Send 4 gratuitous ARP reply : Log the first one only
+	// Send gratuitous ARP replies : Log the first one only
 	// err = c.Reply(mac, ip, EthernetBroadcast, ip) // Send broadcast gratuitous ARP reply
 	err = c.reply(dstEther, mac, ip, EthernetBroadcast, ip) // Send gratuitous ARP reply - unicast to target
 	for i := 0; i < 3; i++ {

@@ -114,6 +114,8 @@ func (c *Handler) probeUnicast(mac net.HardwareAddr, ip net.IP) error {
 	return c.Request(c.config.HostMAC, net.IPv4zero, mac, ip)
 }
 
+// announce sends arp announcement packet
+//
 // Having probed to determine that a desired address may be used safely,
 // a host implementing this specification MUST then announce that it
 // is commencing to use this address by broadcasting ANNOUNCE_NUM ARP
@@ -126,30 +128,24 @@ func (c *Handler) probeUnicast(mac net.HardwareAddr, ip net.IP) error {
 // previously have been using the same address.  The host may begin
 // legitimately using the IP address immediately after sending the first
 // of the two ARP Announcements;
-func (c *Handler) announce(mac net.HardwareAddr, ip net.IP) error {
-	return c.announceWithDstEthernet(EthernetBroadcast, mac, ip, EthernetBroadcast)
-}
-
-func (c *Handler) announceWithDstEthernet(dstEther net.HardwareAddr, mac net.HardwareAddr, ip net.IP, targetMac net.HardwareAddr) (err error) {
+func (c *Handler) announce(dstEther net.HardwareAddr, mac net.HardwareAddr, ip net.IP, targetMac net.HardwareAddr, repeats int) (err error) {
 	if Debug {
 		if bytes.Equal(dstEther, EthernetBroadcast) {
-			log.Printf("ARP send announcement - I am ip=%s mac=%s", ip, mac)
+			log.Printf("ARP send announcement broadcast - I am ip=%s mac=%s", ip, mac)
 		} else {
 			log.Printf("ARP send announcement unicast - I am ip=%s mac=%s to=%s", ip, mac, dstEther)
 		}
 	}
+
 	err = c.requestWithDstEthernet(dstEther, mac, ip, targetMac, ip)
+
 	go func() {
-		time.Sleep(time.Second * 1)
-		c.requestWithDstEthernet(dstEther, mac, ip, targetMac, ip)
-		time.Sleep(time.Second * 1)
-		c.requestWithDstEthernet(dstEther, mac, ip, targetMac, ip)
+		for i := 1; i < repeats; i++ {
+			time.Sleep(time.Millisecond * 500)
+			c.requestWithDstEthernet(dstEther, mac, ip, targetMac, ip)
+		}
 	}()
 	return err
-}
-
-func (c *Handler) announceUnicast(dstEther net.HardwareAddr, mac net.HardwareAddr, ip net.IP) (err error) {
-	return c.announceWithDstEthernet(dstEther, mac, ip, dstEther)
 }
 
 // WhoIs will send a request packet to get the MAC address for the IP. Retry 3 times.
