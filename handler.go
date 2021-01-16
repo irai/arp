@@ -318,9 +318,9 @@ func (c *Handler) ListenAndServe(ctx context.Context) error {
 			mac := target.MAC
 			c.RUnlock()
 			if Debug {
-				log.Printf("ARP ip=%s is virtual - send announcement smac=%v", packet.TargetIP, mac)
+				log.Printf("ARP ip=%s is virtual - send reply smac=%v", packet.TargetIP, mac)
 			}
-			c.reply(mac, packet.TargetIP, EthernetBroadcast, packet.TargetIP)
+			c.reply(packet.SenderHardwareAddr, mac, packet.TargetIP, EthernetBroadcast, packet.TargetIP)
 			continue
 		}
 		c.RUnlock()

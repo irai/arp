@@ -190,7 +190,7 @@ func (c *Handler) spoofLoop(ctx context.Context, client *MACEntry, ip net.IP) {
 		c.forceSpoof(mac, ip)
 
 		// Use VirtualHost to request ownership of the IP; try to force target to acquire another IP
-		c.forceAnnouncement(client.MAC, virtual.MAC, ip)
+		c.forceAnnouncement(mac, virtual.MAC, ip)
 
 		if nTimes%16 == 0 {
 			log.Printf("ARP claim ip=%s mac=%s client=%s repeat=%v duration=%v", ip, virtual.MAC, mac, nTimes, time.Now().Sub(startTime))
@@ -225,7 +225,7 @@ func (c *Handler) forceSpoof(mac net.HardwareAddr, ip net.IP) error {
 
 	// Send 3 unsolicited ARP reply; clients may discard this
 	for i := 0; i < 2; i++ {
-		err = c.reply(c.config.HostMAC, c.config.RouterIP, mac, ip)
+		err = c.reply(mac, c.config.HostMAC, c.config.RouterIP, mac, ip)
 		if err != nil {
 			log.Printf("ARP error spoof client mac=%s ip=%s: %s", mac, ip, err)
 			return err
@@ -245,7 +245,7 @@ func (c *Handler) forceAnnouncement(dstEther net.HardwareAddr, mac net.HardwareA
 
 	// Send 4 gratuitous ARP reply : Log the first one only
 	// err = c.Reply(mac, ip, EthernetBroadcast, ip) // Send broadcast gratuitous ARP reply
-	err = c.replyWithDstEthernet(dstEther, mac, ip, EthernetBroadcast, ip) // Send gratuitous ARP reply - unicast to target
+	err = c.reply(dstEther, mac, ip, EthernetBroadcast, ip) // Send gratuitous ARP reply - unicast to target
 	for i := 0; i < 3; i++ {
 		if err != nil {
 			log.Printf("ARP error send gratuitous packet mac=%s ip=%s: %s", mac, ip, err)
@@ -253,7 +253,7 @@ func (c *Handler) forceAnnouncement(dstEther net.HardwareAddr, mac net.HardwareA
 		time.Sleep(time.Millisecond * 10)
 
 		// Dont show in log
-		err = c.replyWithDstEthernet(dstEther, mac, ip, EthernetBroadcast, ip) // Send gratuitous ARP reply
+		err = c.reply(dstEther, mac, ip, EthernetBroadcast, ip) // Send gratuitous ARP reply
 	}
 
 	return nil

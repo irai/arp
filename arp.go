@@ -23,23 +23,6 @@ var (
 	EthernetBroadcast = net.HardwareAddr{0xff, 0xff, 0xff, 0xff, 0xff, 0xff}
 )
 
-func (c *Handler) requestWithDstEthernet(dstEther net.HardwareAddr, srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr net.HardwareAddr, dstIP net.IP) error {
-	arp, err := marp.NewPacket(marp.OperationRequest, srcHwAddr, srcIP, dstHwAddr, dstIP)
-	if err != nil {
-		return err
-	}
-
-	if err := c.client.SetWriteDeadline(time.Now().Add(writeTimeout)); err != nil {
-		return err
-	}
-
-	return c.client.WriteTo(arp, dstEther)
-}
-
-func (c *Handler) request(srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr net.HardwareAddr, dstIP net.IP) error {
-	return c.requestWithDstEthernet(EthernetBroadcast, srcHwAddr, srcIP, dstHwAddr, dstIP)
-}
-
 // Request send ARP request from src to dst
 // multiple goroutines can call request simultaneously.
 //
@@ -67,20 +50,40 @@ func (c *Handler) Request(srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr ne
 		}
 	}
 
-	return c.request(srcHwAddr, srcIP, dstHwAddr, dstIP)
+	return c.requestWithDstEthernet(EthernetBroadcast, srcHwAddr, srcIP, dstHwAddr, dstIP)
+}
+
+func (c *Handler) request(srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr net.HardwareAddr, dstIP net.IP) error {
+	return c.requestWithDstEthernet(EthernetBroadcast, srcHwAddr, srcIP, dstHwAddr, dstIP)
+}
+
+func (c *Handler) requestWithDstEthernet(dstEther net.HardwareAddr, srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr net.HardwareAddr, dstIP net.IP) error {
+	arp, err := marp.NewPacket(marp.OperationRequest, srcHwAddr, srcIP, dstHwAddr, dstIP)
+	if err != nil {
+		return err
+	}
+
+	if err := c.client.SetWriteDeadline(time.Now().Add(writeTimeout)); err != nil {
+		return err
+	}
+
+	return c.client.WriteTo(arp, dstEther)
 }
 
 // Reply send ARP reply from the src to the dst
 //
 // Call with dstHwAddr = ethernet.Broadcast to reply to all
-func (c *Handler) Reply(srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr net.HardwareAddr, dstIP net.IP) error {
+func (c *Handler) Reply(dstEther net.HardwareAddr, srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr net.HardwareAddr, dstIP net.IP) error {
 	if Debug {
 		log.Printf("ARP send reply - ip=%s is at mac=%s", srcIP, srcHwAddr)
 	}
-	return c.reply(srcHwAddr, srcIP, dstHwAddr, dstIP)
+	return c.reply(dstEther, srcHwAddr, srcIP, dstHwAddr, dstIP)
 }
 
-func (c *Handler) replyWithDstEthernet(dstEther net.HardwareAddr, srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr net.HardwareAddr, dstIP net.IP) error {
+// reply sends a ARP reply packet from src to dst.
+//
+// dstEther identifies the target for the Ethernet packet : i.e. use EthernetBroadcast for gratuitous ARP
+func (c *Handler) reply(dstEther net.HardwareAddr, srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr net.HardwareAddr, dstIP net.IP) error {
 	p, err := marp.NewPacket(marp.OperationReply, srcHwAddr, srcIP, dstHwAddr, dstIP)
 	if err != nil {
 		return err
@@ -91,10 +94,6 @@ func (c *Handler) replyWithDstEthernet(dstEther net.HardwareAddr, srcHwAddr net.
 	}
 
 	return c.client.WriteTo(p, dstEther)
-}
-
-func (c *Handler) reply(srcHwAddr net.HardwareAddr, srcIP net.IP, dstHwAddr net.HardwareAddr, dstIP net.IP) error {
-	return c.replyWithDstEthernet(dstHwAddr, srcHwAddr, srcIP, dstHwAddr, dstIP)
 }
 
 // Probe will send an arp request broadcast on the local link.
