@@ -177,10 +177,12 @@ func (c *Handler) spoofLoop(ctx context.Context, client *MACEntry, ip net.IP) {
 			log.Printf("ARP claim end ip=%s mac=%s client=%s repeat=%v duration=%v", ip, virtual.MAC, mac, nTimes, time.Now().Sub(startTime))
 			virtual.Online = false // goroutine ended
 			c.Unlock()
-			if c.routerEntry.MAC != nil {
+			/** This causes a network lock up - why? all routes and arp table lose state
 				// Restore target ARP table to default gw
+			if c.routerEntry.MAC != nil {
 				c.announce(mac, c.routerEntry.MAC, c.config.RouterIP, EthernetBroadcast, 2)
 			}
+			***/
 			return
 		}
 
