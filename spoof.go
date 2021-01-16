@@ -12,8 +12,9 @@ import (
 // ForceIPChange performs the following:
 //  1. set client state to "hunt" which will continuously spoof the client ARP table
 //  2. create a virtual host for each IP and claim the IP
-//  3. spoof the client IP to redirect all traffic to host
-//  4. notify when client change IP
+//  3. spoof the client ARP table to redirect all traffic to host
+//  4. claim the client IP to force client to reaquire DHCP
+//  5. notify when client change IP
 //
 // client will revert back to "normal" when a new IP is detected for the MAC
 func (c *Handler) ForceIPChange(mac net.HardwareAddr) error {
@@ -176,6 +177,10 @@ func (c *Handler) spoofLoop(ctx context.Context, client *MACEntry, ip net.IP) {
 			log.Printf("ARP claim end ip=%s mac=%s client=%s repeat=%v duration=%v", ip, virtual.MAC, mac, nTimes, time.Now().Sub(startTime))
 			virtual.Online = false // goroutine ended
 			c.Unlock()
+			if c.routerEntry.MAC != nil {
+				// Restore target ARP table to default gw
+				c.announce(mac, c.routerEntry.MAC, c.config.RouterIP, EthernetBroadcast, 2)
+			}
 			return
 		}
 
