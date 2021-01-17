@@ -29,7 +29,7 @@ func TestHandler_ForceIPChange(t *testing.T) {
 	e2.Online = true
 	e2.updateIP(ip3)
 	e2.updateIP(ip4)
-	h.ForceIPChange(e2.MAC)
+	h.ForceIPChange(e2.MAC, true)
 
 	if e := h.table.findByMAC(mac2); e == nil || e.State != StateHunt || !e.Online {
 		t.Fatalf("Test_ForceIPChange entry2 state=%s, online=%v", e.State, e.Online)

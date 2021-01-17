@@ -112,7 +112,7 @@ func cmd(c *arp.Handler) {
 				log.Print(err)
 				break
 			}
-			c.ForceIPChange(entry.MAC)
+			c.ForceIPChange(entry.MAC, true)
 		case 's':
 			MACEntry, err := getMAC(c, text)
 			if err != nil {

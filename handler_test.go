@@ -213,7 +213,7 @@ func Test_CaptureSameIP(t *testing.T) {
 	e, _ := h.table.upsert(StateNormal, mac2, ip2)
 	e.Online = true
 	time.Sleep(time.Millisecond * 20) // time for ListenAndServe to start
-	h.ForceIPChange(mac2)
+	h.ForceIPChange(mac2, true)
 
 	tests := []struct {
 		name      string
@@ -288,7 +288,7 @@ func Test_CaptureEnterOffline(t *testing.T) {
 	e4, _ := h.table.upsert(StateNormal, mac4, ip4)
 	e4.Online = true
 	time.Sleep(time.Millisecond * 20) // time for ListenAndServe to start
-	h.ForceIPChange(mac2)
+	h.ForceIPChange(mac2, true)
 	if e := h.table.findByMAC(mac2); e == nil || e.State != StateHunt || !e.Online {
 		t.Fatalf("Test_CaptureEnterOffline entry2 state=%s, online=%v", e.State, e.Online)
 	}

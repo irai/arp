@@ -25,6 +25,7 @@ type MACEntry struct {
 	State       arpState
 	LastUpdated time.Time
 	Online      bool
+	ClaimIP     bool // if true, will claim the target IP; likely to force the target IP to stop working
 }
 
 // IP returns the last IP detected

@@ -17,7 +17,7 @@ import (
 //  5. notify when client change IP
 //
 // client will revert back to "normal" when a new IP is detected for the MAC
-func (c *Handler) ForceIPChange(mac net.HardwareAddr) error {
+func (c *Handler) ForceIPChange(mac net.HardwareAddr, claimIP bool) error {
 	if Debug {
 		log.Printf("ARP force IP change mac=%s", mac)
 	}
@@ -73,6 +73,7 @@ func (c *Handler) StopIPChange(mac net.HardwareAddr) error {
 
 	// This will end the spoof goroutine
 	client.State = StateNormal
+	client.ClaimIP = false
 	return nil
 }
 
@@ -136,30 +137,32 @@ func (c *Handler) IPChanged(mac net.HardwareAddr, clientIP net.IP) {
 	}()
 }
 
-// spoofLoop creates a virtual host spoof the target IPs
-// until it changes IP or go offline.
+// spoofLoop attacks the client with ARP attacks
 //
-// It will send a number of ARP packets to:
+// It will continuously send a number of ARP packets to client:
 //   1. spoof the client arp table to send router packets to us
-//   2. claim the ownership of the IP
+//   2. optionally, claim the ownership of the IP to force client to change IP or go offline
 //
 func (c *Handler) spoofLoop(ctx context.Context, client *MACEntry, ip net.IP) {
 
 	// create a virtual host and move IPs to it
 	// Virtual Host will exist until they get deleted by the purge goroutine
+	var virtual *MACEntry
 	c.Lock()
-	virtual := c.table.findVirtualIP(ip)
+	if client.ClaimIP {
+		virtual = c.table.findVirtualIP(ip)
 
-	// Online virtual hosts are still running in a goroutine
-	if virtual != nil && virtual.Online {
-		c.Unlock()
-		return
-	}
+		// Online virtual hosts are still running in a goroutine
+		if virtual != nil && virtual.Online {
+			c.Unlock()
+			return
+		}
 
-	if virtual == nil {
-		virtual, _ = c.table.upsert(StateVirtualHost, newVirtualHardwareAddr(), ip)
+		if virtual == nil {
+			virtual, _ = c.table.upsert(StateVirtualHost, newVirtualHardwareAddr(), ip)
+		}
+		virtual.Online = true // online indicates goroutine is running
 	}
-	virtual.Online = true // online indicates goroutine is running
 	mac := client.MAC
 	c.Unlock()
 
@@ -168,14 +171,16 @@ func (c *Handler) spoofLoop(ctx context.Context, client *MACEntry, ip net.IP) {
 	ticker := time.NewTicker(time.Second * 4).C
 	startTime := time.Now()
 	nTimes := 0
-	log.Printf("ARP claim ip=%s mac=%s client=%s time=%v", ip, virtual.MAC, mac, startTime)
+	log.Printf("ARP attack ip=%s client=%s time=%v", ip, mac, startTime)
 	for {
 		c.Lock()
 		// Always search for MAC in case it has been deleted.
 		client := c.table.findByMAC(mac)
 		if client == nil || client.State != StateHunt {
-			log.Printf("ARP claim end ip=%s mac=%s client=%s repeat=%v duration=%v", ip, virtual.MAC, mac, nTimes, time.Now().Sub(startTime))
-			virtual.Online = false // goroutine ended
+			log.Printf("ARP attack end ip=%s client=%s repeat=%v duration=%v", ip, mac, nTimes, time.Now().Sub(startTime))
+			if virtual != nil {
+				virtual.Online = false // goroutine ended
+			}
 			c.Unlock()
 			/** This causes a network lock up - why? all routes and arp table lose state
 				// Restore target ARP table to default gw
@@ -186,7 +191,9 @@ func (c *Handler) spoofLoop(ctx context.Context, client *MACEntry, ip net.IP) {
 			return
 		}
 
-		virtual.LastUpdated = time.Now()
+		if virtual != nil {
+			virtual.LastUpdated = time.Now()
+		}
 
 		c.Unlock()
 
@@ -197,12 +204,12 @@ func (c *Handler) spoofLoop(ctx context.Context, client *MACEntry, ip net.IP) {
 		c.forceSpoof(mac, ip)
 
 		// Use VirtualHost to claim ownership of the IP and force target to acquire another IP
-		if nTimes < 5 {
+		if virtual != nil && nTimes < 5 {
 			c.forceAnnouncement(mac, virtual.MAC, ip)
 		}
 
 		if nTimes%16 == 0 {
-			log.Printf("ARP claim ip=%s mac=%s client=%s repeat=%v duration=%v", ip, virtual.MAC, mac, nTimes, time.Now().Sub(startTime))
+			log.Printf("ARP attack ip=%s client=%s repeat=%v duration=%v", ip, mac, nTimes, time.Now().Sub(startTime))
 		}
 		nTimes++
 
