@@ -245,6 +245,7 @@ func Test_CaptureSameIP(t *testing.T) {
 			}
 			time.Sleep(time.Millisecond * 10)
 			if len(h.table.macTable) != tt.wantLen {
+				h.PrintTable()
 				t.Errorf("Test_catpureSameIP:%s table len = %v, wantLen %v", tt.name, len(h.table.macTable), tt.wantLen)
 			}
 			if tt.wantIPs != 0 {
@@ -289,8 +290,13 @@ func Test_CaptureEnterOffline(t *testing.T) {
 	e4.Online = true
 	time.Sleep(time.Millisecond * 20) // time for ListenAndServe to start
 	h.ForceIPChange(mac2, true)
+	time.Sleep(time.Millisecond * 20)
 	if e := h.table.findByMAC(mac2); e == nil || e.State != StateHunt || !e.Online {
 		t.Fatalf("Test_CaptureEnterOffline entry2 state=%s, online=%v", e.State, e.Online)
+	}
+	if e := h.table.findVirtualIP(ip2); e == nil || e.State != StateVirtualHost || !e.Online {
+		h.PrintTable()
+		t.Fatalf("Test_CaptureEnterOffline wrong virtualip entry=%v", e)
 	}
 	if e := h.table.findByMAC(mac3); e == nil || e.State != StateNormal || !e.Online {
 		t.Fatalf("Test_CaptureEnterOffline entry3 state=%s, online=%v", e.State, e.Online)

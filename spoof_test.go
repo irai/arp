@@ -27,8 +27,8 @@ func TestHandler_ForceIPChange(t *testing.T) {
 	time.Sleep(time.Millisecond * 20) // time for ListenAndServe to start
 	e2, _ := h.table.upsert(StateNormal, mac2, ip2)
 	e2.Online = true
-	e2.updateIP(ip3)
-	e2.updateIP(ip4)
+	h.table.updateIP(e2, ip3)
+	h.table.updateIP(e2, ip4)
 	h.ForceIPChange(e2.MAC, true)
 
 	if e := h.table.findByMAC(mac2); e == nil || e.State != StateHunt || !e.Online {
@@ -42,9 +42,9 @@ func TestHandler_ForceIPChange(t *testing.T) {
 		wantLen int
 		wantIPs int
 	}{
-		{"request2", newPacket(marp.OperationRequest, mac2, ip4, zeroMAC, ip4), nil, 4, 3},
-		{"request2", newPacket(marp.OperationRequest, mac2, ip4, zeroMAC, ip4), nil, 4, 3},
-		{"request2", newPacket(marp.OperationRequest, mac2, ip5, zeroMAC, ip5), nil, 4, 4},
+		{"request3", newPacket(marp.OperationRequest, mac2, ip4, zeroMAC, ip4), nil, 4, 3},
+		{"request4", newPacket(marp.OperationRequest, mac2, ip4, zeroMAC, ip4), nil, 4, 3},
+		{"request5", newPacket(marp.OperationRequest, mac2, ip5, zeroMAC, ip5), nil, 4, 4},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -53,6 +53,7 @@ func TestHandler_ForceIPChange(t *testing.T) {
 			}
 			time.Sleep(time.Millisecond * 10)
 			if len(h.table.macTable) != tt.wantLen {
+				h.PrintTable()
 				t.Errorf("TestHandler_ForceIPChange:%s table len = %v, wantLen %v", tt.name, len(h.table.macTable), tt.wantLen)
 			}
 			if tt.wantIPs != 0 {
@@ -77,6 +78,7 @@ func TestHandler_ForceIPChange(t *testing.T) {
 		t.Errorf("TestHandler_ForceIPChange invalid virtual ip5")
 	}
 	if entry := h.table.findByIP(ip5); entry == nil || entry.State != StateNormal || len(entry.IPs()) != 4 {
+		h.PrintTable()
 		t.Errorf("TestHandler_ForceIPChange invalid virtual ip52 entry=%+v", entry)
 	}
 	cancel()

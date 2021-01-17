@@ -37,6 +37,7 @@ func (c *Handler) ForceIPChange(mac net.HardwareAddr, claimIP bool) error {
 	}
 
 	client.State = StateHunt
+	client.ClaimIP = claimIP
 	ips := client.IPs()
 	c.Unlock()
 

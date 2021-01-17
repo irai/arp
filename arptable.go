@@ -1,6 +1,7 @@
 package arp
 
 import (
+	"bytes"
 	"fmt"
 	"math/rand"
 	"net"
@@ -135,7 +136,29 @@ func (t *arpTable) getTable() (table []MACEntry) {
 	return table
 }
 
-func (e *MACEntry) updateIP(ip net.IP) (found bool) {
+// deleteStaleIP removes any duplicate IP in other entries
+// This is to prevent an old stale IP in another entry clashing with a newly acquired IP
+func (t *arpTable) deleteStaleIP(ee *MACEntry, ip net.IP) {
+	if ee.State == StateVirtualHost { // skip if entry is virtual
+		return
+	}
+	for _, e := range t.macTable {
+		if e.State == StateVirtualHost || bytes.Equal(e.MAC, ee.MAC) {
+			continue
+		}
+		s := e.IPArray[1:] // remove IP duplicates from second element onwards
+		for i := range s {
+			if s[i].IP.Equal(ip) {
+				if i < len(s)-1 {
+					copy(s[i:], s[i+1:])
+				}
+				s[len(s)-1] = IPEntry{}
+			}
+		}
+	}
+}
+
+func (t *arpTable) updateIP(e *MACEntry, ip net.IP) (found bool) {
 
 	now := time.Now()
 	// common path - IP is the same
@@ -149,6 +172,9 @@ func (e *MACEntry) updateIP(ip net.IP) (found bool) {
 	if e.State == StateHunt && e.findIP(ip) != nil {
 		return true
 	}
+
+	// remove the IP from other entries if it exist
+	t.deleteStaleIP(e, ip)
 
 	// push all entries down by one
 	i := nIPs - 1
@@ -191,7 +217,7 @@ func (t *arpTable) upsert(state arpState, mac net.HardwareAddr, ip net.IP) (entr
 		return e, found
 	}
 
-	ok := e.updateIP(ip)
+	ok := t.updateIP(e, ip)
 	if found && ok {
 		return e, true
 	}

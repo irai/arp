@@ -368,13 +368,13 @@ func (c *Handler) ListenAndServe(ctx context.Context) error {
 
 				// If this is a new IP, stop hunting it.
 				// The spoof goroutine will detect the mac changed to normal and terminate.
-				if !sender.updateIP(dupIP(packet.SenderIP)) {
+				if !c.table.updateIP(sender, dupIP(packet.SenderIP)) {
 					sender.State = StateNormal
 					notify++
 				}
 
 			case StateNormal:
-				if !sender.updateIP(dupIP(packet.SenderIP)) {
+				if !c.table.updateIP(sender, dupIP(packet.SenderIP)) {
 					notify++
 				}
 
@@ -385,7 +385,7 @@ func (c *Handler) ListenAndServe(ctx context.Context) error {
 		case marp.OperationReply:
 			// Android does not send collision detection request,
 			// we will see a reply instead. Check if the address has changed.
-			if !sender.updateIP(dupIP(packet.SenderIP)) {
+			if !c.table.updateIP(sender, dupIP(packet.SenderIP)) {
 				sender.State = StateNormal // will end hunt goroutine
 				notify++
 			}

@@ -104,23 +104,23 @@ func Test_DuplicateIP(t *testing.T) {
 	h, _ := testHandler(t)
 	e, _ := h.table.upsert(StateNormal, mac1, ip2)
 	e.Online = true
-	e.updateIP(ip3)
+	h.table.updateIP(e, ip3)
 	if !e.IP().Equal(ip3) && len(e.IPs()) != 2 {
 		t.Fatal("expected ip3 ", e.IP())
 	}
-	e.updateIP(ip2)
+	h.table.updateIP(e, ip2)
 	if !e.IP().Equal(ip2) && len(e.IPs()) != 3 {
 		t.Fatal("expected ip2-2 ", e.IP())
 	}
-	e.updateIP(ip4)
+	h.table.updateIP(e, ip4)
 	if !e.IP().Equal(ip4) && len(e.IPs()) != 4 {
 		t.Fatal("expected ip2 ", e.IP())
 	}
-	e.updateIP(ip5)
+	h.table.updateIP(e, ip5)
 	if !e.IP().Equal(ip5) && len(e.IPs()) != 4 {
 		t.Fatal("expected ip5 ", e.IP())
 	}
-	e.updateIP(ip2)
+	h.table.updateIP(e, ip2)
 	if !e.IP().Equal(ip2) && len(e.IPs()) != 4 {
 		t.Fatal("expected ip2-2 ", e.IP())
 	}
@@ -133,31 +133,31 @@ func Test_HuntIP(t *testing.T) {
 	h, _ := testHandler(t)
 
 	e, _ := h.table.upsert(StateNormal, mac1, ip2)
-	e.updateIP(ip3)
+	h.table.updateIP(e, ip3)
 	e.Online = true
 	e.State = StateHunt
 
-	e.updateIP(ip3)
+	h.table.updateIP(e, ip3)
 	if !e.IP().Equal(ip3) && len(e.IPs()) != 2 {
 		t.Fatal("expected ip3 ", e.IP())
 	}
-	e.updateIP(ip2)
+	h.table.updateIP(e, ip2)
 	if !e.IP().Equal(ip3) && len(e.IPs()) != 2 {
 		t.Fatal("expected ip2 ", e.IP())
 	}
-	e.updateIP(ip4)
+	h.table.updateIP(e, ip4)
 	if !e.IP().Equal(ip4) && len(e.IPs()) != 3 {
 		t.Fatal("expected ip4 ", e.IP())
 	}
-	e.updateIP(ip2)
+	h.table.updateIP(e, ip2)
 	if !e.IP().Equal(ip4) && len(e.IPs()) != 3 {
 		t.Fatal("expected ip2-2 ", e.IP())
 	}
-	e.updateIP(ip5)
+	h.table.updateIP(e, ip5)
 	if !e.IP().Equal(ip5) && len(e.IPs()) != 4 {
 		t.Fatal("expected ip5 ", e.IP())
 	}
-	e.updateIP(ip3)
+	h.table.updateIP(e, ip3)
 	if !e.IP().Equal(ip3) && len(e.IPs()) != 4 {
 		t.Fatal("expected ip3-2 ", e.IP())
 	}
@@ -166,4 +166,35 @@ func Test_HuntIP(t *testing.T) {
 		t.Fatal("invalid IPs", e.IPs())
 	}
 
+}
+
+func Test_arpTable_deleteStaleIP(t *testing.T) {
+	h, _ := testHandler(t)
+	e, _ := h.table.upsert(StateNormal, mac1, ip2)
+	e.Online = true
+
+	h.table.updateIP(e, ip3)
+	h.table.updateIP(e, ip4)
+	h.table.updateIP(e, ip5)
+	if !e.IP().Equal(ip5) && len(e.IPs()) != 4 {
+		t.Fatal("expected ip5 ", e.IP())
+	}
+
+	e1, _ := h.table.upsert(StateNormal, mac2, ip2)
+	if !e1.IP().Equal(ip2) && len(e1.IPs()) != 1 {
+		t.Fatal("expected ip2 ", e1.IPs())
+	}
+	if !e.IP().Equal(ip4) && len(e.IPs()) != 3 {
+		t.Fatal("expected ip2 ", e.IPs())
+	}
+
+	h.table.updateIP(e1, ip5)
+	h.table.updateIP(e1, ip4)
+	h.table.updateIP(e1, ip3)
+	if !e1.IP().Equal(ip3) && len(e1.IPs()) != 4 {
+		t.Fatal("expected dup ip5 ", e1.IPs())
+	}
+	if !e.IP().Equal(ip5) && len(e.IPs()) != 1 {
+		t.Fatal("expected dup ip5e ", e.IPs())
+	}
 }
