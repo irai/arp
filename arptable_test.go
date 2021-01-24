@@ -125,7 +125,7 @@ func Test_DuplicateIP(t *testing.T) {
 		t.Fatal("expected ip2-2 ", e.IP())
 	}
 
-	if !e.IPArray[0].IP.Equal(ip2) || !e.IPArray[1].IP.Equal(ip5) || !e.IPArray[2].IP.Equal(ip4) || !e.IPArray[3].IP.Equal(ip2) {
+	if !e.IPArray[0].IP.Equal(ip2) || !e.IPArray[1].IP.Equal(ip5) || !e.IPArray[2].IP.Equal(ip4) || !e.IPArray[3].IP.Equal(ip3) {
 		t.Fatal("invalid IPs", e.IPs())
 	}
 }

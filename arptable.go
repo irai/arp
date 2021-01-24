@@ -1,7 +1,6 @@
 package arp
 
 import (
-	"bytes"
 	"fmt"
 	"math/rand"
 	"net"
@@ -143,7 +142,7 @@ func (t *arpTable) deleteStaleIP(ee *MACEntry, ip net.IP) {
 		return
 	}
 	for _, e := range t.macTable {
-		if e.State == StateVirtualHost || bytes.Equal(e.MAC, ee.MAC) {
+		if e.State == StateVirtualHost {
 			continue
 		}
 		s := e.IPArray[1:] // remove IP duplicates from second element onwards
