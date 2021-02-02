@@ -109,8 +109,11 @@ func (c *Handler) purgeLoop(ctx context.Context, offline time.Duration, purge ti
 			}
 
 			// delete after loop because this will change the ipTable map
-			for i := range macs {
-				c.table.delete(macs[i])
+			if len(macs) > 0 {
+				c.table.printTable()
+				for i := range macs {
+					c.table.delete(macs[i])
+				}
 			}
 			c.Unlock()
 		}
