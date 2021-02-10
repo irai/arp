@@ -20,6 +20,7 @@ type bufferedPacketConn struct {
 // if p is nil, auto create a bufferedPacketConn
 func NewTestHandler(config Config, p net.PacketConn) (c *Handler, conn *marp.Client, err error) {
 	c = newHandler(config)
+	c.table = newARPTable() // we want an empty table for testing
 	ifi, err := net.InterfaceByName(config.NIC)
 	if err != nil {
 		return nil, nil, fmt.Errorf("InterfaceByName error: %w", err)
