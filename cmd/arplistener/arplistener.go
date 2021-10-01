@@ -144,7 +144,7 @@ func getNICInfo(nic string) (ip net.IP, mac net.HardwareAddr, err error) {
 
 	all, err := net.Interfaces()
 	for _, v := range all {
-		log.Print("interface name ", v.Name, v.HardwareAddr.String())
+		log.Printf("interface name %s %s", v.Name, v.HardwareAddr.String())
 	}
 	ifi, err := net.InterfaceByName(nic)
 	if err != nil {
