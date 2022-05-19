@@ -131,10 +131,11 @@ func (c *Handler) IPChanged(mac net.HardwareAddr, clientIP net.IP) {
 			}
 		}
 		log.Printf("ARP ip=%s not detect for mac=%s", clientIP, mac)
-
-		c.RLock()
-		c.table.printTable()
-		c.RUnlock()
+		if Debug {
+			c.RLock()
+			c.table.printTable()
+			c.RUnlock()
+		}
 	}()
 }
 
