@@ -4,6 +4,12 @@ The package implements a user level arp table management in golang that
 monitor the local network for ARP changes and provide notifications
 when a MAC switch between online and offline.
 
+**NOTE: A new package [packet](https://github.com/irai/packet) has better arp spoofing support**  
+This package is functional and useful for experimentation but all efforts going forward 
+focus on [packet](https://github.com/irai/packet) which addresses many issues
+and in addition to arp spoofing it also support general packet mangling and dhcp4 and icmp6 spoofing.
+
+
 ## Force IP address change (IP spoofing)
 The most useful function is to force an IP address change by claiming
 the IP of a target MAC. It achieves this by persistently claiming the 
