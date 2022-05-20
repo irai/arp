@@ -42,25 +42,27 @@ listen for ARP changes and generate a notification each time a mac changes betwe
 ```golang
 	HomeRouterIP := net.ParseIP("192.168.0.1").To4()
 	HomeLAN := net.IPNet{IP: net.ParseIP("192.168.0.0").To4(), Mask: net.CIDRMask(25, 32)}
+	NIC := "eth0"
+	HostMAC, _ := net.ParseMAC("xx:xx:xx:xx:xx:xx")
+	HostIP := net.ParseIP("192.168.1.2").To4()
 
-	c, err := arp.NewHandler(NIC, HostMAC, HostIP, HomeRouterIP, HomeLAN)
-	if err != nil {
-		log.Fatal("error ", err)
-	}
-
+	c, err := arp.New(arp.Config{
+		NIC:                     NIC,
+		HostMAC:                 HostMAC,
+		HostIP:                  HostIP,
+		RouterIP:                HomeRouterIP,
+		HomeLAN:                 HomeLAN,
+		ProbeInterval:           time.Minute,
+		FullNetworkScanInterval: 0,
+	})
 	go c.ListenAndServe(time.Second * 30 * 5)
 
 	c.printTable()
 ```
 
 Listen to changes to mac table
-```golang
-    arpChannel := make(chan arp.MACEntry, 16)
-	c.AddNotificationChannel(arpChannel)
 
-	go arpNotification(arpChannel)
-```
-
+New a message broker function
 ```golang
 func arpNotification(arpChannel chan arp.MACEntry) {
 	for {
@@ -73,8 +75,16 @@ func arpNotification(arpChannel chan arp.MACEntry) {
 }
 ```
 
+```golang
+arpChannel := make(chan arp.MACEntry, 16)
+c.AddNotificationChannel(arpChannel)
+
+go arpNotification(arpChannel)
+```
+
+
 To force an IP change simply invoke ForceIPChange with the current mac and ip value.
 ```golang
-	MACEntry := c.findByMAC("xx:xx:xx:xx:xx:xx")
-	c.ForceIPChange(MACEntry.MAC, MACEntry.IP)
+MACEntry := c.findByMAC("xx:xx:xx:xx:xx:xx")
+c.ForceIPChange(MACEntry.MAC, MACEntry.IP)
 ```
