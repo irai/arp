@@ -61,7 +61,12 @@ listen for ARP changes and generate a notification each time a mac changes betwe
 		ProbeInterval:           time.Minute,
 		FullNetworkScanInterval: 0,
 	})
-	go c.ListenAndServe(time.Second * 30 * 5)
+	if err != nil {
+		log.Fatal("error ", err)
+	}
+	defer c.Close()
+
+	go c.ListenAndServe(context.Background())
 
 	c.printTable()
 ```
